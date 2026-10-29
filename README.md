@@ -131,10 +131,13 @@ npx expo export --platform android   # production Hermes bundle
 
 - `beta` is the integration branch. `main` is protected and reserved for reviewed, release-ready code.
 - Every push and pull request targeting `beta` runs `.github/workflows/android-beta.yml`:
-  typecheck, lint, Jest, Expo Doctor, `expo prebuild`, and an **arm64 debug APK** build.
-- The APK is uploaded as the `freehaven-beta-<sha>` artifact (14 days). It is never committed.
+  typecheck, lint, Jest, Expo Doctor, `expo prebuild`, and **arm64 beta APKs**.
+- The artifact `freehaven-beta-<sha>` contains:
+  - `app-release.apk` — standalone, JavaScript embedded, signed with the **debug keystore**. Install this on a phone.
+  - `app-debug.apk` — development build; requires a Metro server (`npx expo start`) and is not standalone.
+- The artifact is retained for 14 days and is never committed.
 - There is no production release, Play Store publishing or promotion to `main` yet.
-- Download the artifact from the Actions run and install it with `adb install -r app-debug.apk`.
+- Install the standalone build with `adb install -r app-release.apk`.
 
 See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the branch rules and [`SECURITY.md`](./SECURITY.md) for reporting.
 

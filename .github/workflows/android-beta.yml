@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   validate-and-build:
-    name: Validate and build debug APK
+    name: Validate and build beta APKs
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     env:
@@ -77,21 +77,25 @@ jobs:
       - name: Generate native Android project
         run: npx expo prebuild --platform android --no-install
 
-      - name: Build debug APK
+      - name: Build debug and standalone beta APKs
         working-directory: android
-        run: ./gradlew assembleDebug -PreactNativeArchitectures=arm64-v8a --no-daemon
+        run: ./gradlew assembleDebug assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
 
       - name: Record APK metadata
         if: success()
         run: |
-          ls -lh android/app/build/outputs/apk/debug/
-          sha256sum android/app/build/outputs/apk/debug/app-debug.apk
+          ls -lh android/app/build/outputs/apk/debug android/app/build/outputs/apk/release
+          sha256sum \
+            android/app/build/outputs/apk/debug/app-debug.apk \
+            android/app/build/outputs/apk/release/app-release.apk
 
-      - name: Upload debug APK
+      - name: Upload beta APKs
         if: success()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: freehaven-beta-${{ github.sha }}
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
