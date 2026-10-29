@@ -3,20 +3,32 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "dependencies": {
-    "@expo/ui": "~58.0.25",
+    "@expo/vector-icons": "^15.0.2",
     "expo": "~58.0.21",
+    "expo-asset": "~58.0.19",
+    "expo-audio": "~58.0.10",
     "expo-constants": "~58.0.14",
     "expo-device": "~58.0.5",
+    "expo-document-picker": "~58.0.4",
+    "expo-file-system": "~58.0.13",
     "expo-font": "~58.0.11",
-    "expo-glass-effect": "~58.0.5",
+    "expo-haptics": "~58.0.7",
     "expo-image": "~58.0.18",
     "expo-linking": "~58.0.15",
+    "expo-notifications": "~58.1.7",
     "expo-router": "~58.0.28",
+    "expo-secure-store": "~58.0.2",
+    "expo-sharing": "~58.0.21",
+    "expo-speech": "~58.0.3",
     "expo-splash-screen": "~58.0.12",
+    "expo-sqlite": "~58.0.14",
     "expo-status-bar": "~58.0.4",
-    "expo-symbols": "~58.0.4",
     "expo-system-ui": "~58.0.7",
     "expo-web-browser": "~58.0.7",
+    "fast-xml-parser": "^5.11.2",
+    "jszip": "^3.10.2",
+    "pako": "^3.0.3",
+    "pdf-lib": "^1.17.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-native": "0.88.1",
@@ -25,19 +37,50 @@
     "react-native-safe-area-context": "~5.10.1",
     "react-native-screens": "~4.30.0",
     "react-native-web": "~0.21.4",
-    "react-native-worklets": "0.13.0"
+    "react-native-webview": "14.0.1",
+    "react-native-worklets": "0.13.0",
+    "zustand": "^5.0.16"
   },
   "devDependencies": {
+    "@testing-library/react-native": "^14.1.0",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/jest": "^30.0.0",
+    "@types/pako": "^2.0.4",
     "@types/react": "~19.3.0",
+    "better-sqlite3": "^13.0.3",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~58.0.4",
+    "jest": "^30.5.2",
+    "jest-expo": "^58.0.13",
+    "tesseract.js": "^7.0.0",
     "typescript": "~6.0.3"
   },
   "scripts": {
     "start": "expo start",
-    "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "eslint .",
+    "test": "jest --runInBand",
+    "typecheck": "tsc --noEmit"
   },
-  "private": true
+  "private": true,
+  "jest": {
+    "preset": "jest-expo",
+    "testMatch": [
+      "**/__tests__/**/*.test.ts?(x)"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/jest.setup.ts"
+    ],
+    "transformIgnorePatterns": [
+      "node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|react-native-webview))"
+    ],
+    "moduleNameMapper": {
+      "^@/(.*)$": "<rootDir>/src/$1"
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  }
 }

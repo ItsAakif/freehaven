@@ -1,0 +1,185 @@
+/** @jest-environment node */
+import { migrate, resetDriverForTests, setDriverForTests } from '@/data/db';
+import { MIGRATION_1 } from '@/data/schema';
+import { createTestDriver } from '@/data/__tests__/testDriver';
+import { getProfile, saveProfile, familiarityScore } from '@/data/repositories/profile';
+import { logActivity, minutesByDay, minutesToday, readingMinutes } from '@/data/repositories/activity';
+import {
+  addPlanItem,
+  addCards,
+  createPlan,
+  listPlanItems,
+  listSummaries,
+  reviewCard,
+  saveSummary,
+} from '@/data/repositories/learning';
+import { bookMastery, rebuildPlanSequence, topicMastery } from '@/data/repositories/mastery';
+import {
+  addBookmark,
+  createBookmarkFolder,
+  listBookmarksWithBooks,
+  updateBookmark,
+} from '@/data/repositories/reading';
+import { attachTopics, upsertCatalogueBook } from '@/data/repositories/books';
+
+const book = (id: string, title: string, pages = 200) => ({
+  id,
+  provider: 'gutendex',
+  title,
+  author: 'Author',
+  pageCount: pages,
+  subjects: [],
+  source: 'gutenberg' as const,
+  sourceId: id,
+  access: 'public_domain' as const,
+});
+
+describe('schema v2 upgrade', () => {
+  it('upgrades a v1 database in place and preserves bookmarks', async () => {
+    const driver = createTestDriver();
+    await driver.exec(MIGRATION_1);
+    await driver.exec('PRAGMA user_version = 1');
+    await driver.run(
+      "INSERT INTO books (id, title, source, access, created_at, updated_at) VALUES ('b','Old Book','import','user_import',0,0)",
+    );
+    await driver.run(
+      "INSERT INTO bookmarks (id, book_id, locator, label, created_at) VALUES ('bm1','b','{}','Old bookmark',1)",
+    );
+
+    await migrate(driver);
+
+    const columns = await driver.all<{ name: string }>('PRAGMA table_info(bookmarks)');
+    const names = columns.map((c) => c.name);
+    expect(names).toContain('folder_id');
+    expect(names).toContain('tags_json');
+    const bookmarks = await driver.all<{ label: string }>('SELECT * FROM bookmarks');
+    expect(bookmarks).toHaveLength(1);
+    expect(bookmarks[0].label).toBe('Old bookmark');
+    const version = await driver.first<{ user_version: number }>('PRAGMA user_version');
+    expect(version?.user_version).toBe(3);
+    await driver.close();
+  });
+});
+
+describe('profile, activity and mastery', () => {
+  let driver: ReturnType<typeof createTestDriver>;
+
+  beforeEach(async () => {
+    driver = createTestDriver();
+    await setDriverForTests(driver);
+  });
+
+  afterEach(async () => {
+    await resetDriverForTests();
+    try {
+      await driver.close();
+    } catch {
+      /* closed */
+    }
+  });
+
+  it('stores onboarding goal, topics and familiarity', async () => {
+    const saved = await saveProfile({
+      goal: 'think clearly',
+      topics: ['philosophy', 'psychology'],
+      familiarity: { philosophy: 'new', psychology: 'confident' },
+      minutesPerDay: 20,
+      onboardingComplete: true,
+    });
+    expect(saved.onboardingComplete).toBe(true);
+    const loaded = await getProfile();
+    expect(loaded.topics).toEqual(['philosophy', 'psychology']);
+    expect(loaded.familiarity.psychology).toBe('confident');
+    expect(loaded.minutesPerDay).toBe(20);
+    expect(familiarityScore(loaded, 'philosophy')).toBe(1);
+    expect(familiarityScore(loaded, 'psychology')).toBe(3);
+    expect(familiarityScore(loaded, 'unknown')).toBe(2);
+  });
+
+  it('aggregates study minutes and daily buckets', async () => {
+    await logActivity('read', { minutes: 3.5 });
+    await logActivity('review', { minutes: 0.5 });
+    expect(await minutesToday()).toBe(4);
+    const days = await minutesByDay(7);
+    expect(days).toHaveLength(7);
+    expect(days[6].minutes).toBe(4);
+    expect(readingMinutes(1000, 0.1)).toBeCloseTo(0.5, 1);
+    expect(readingMinutes(null, 0.5)).toBe(0);
+  });
+
+  it('computes per-book and per-topic mastery', async () => {
+    await upsertCatalogueBook(book('phil:1', 'Meditations'));
+    await attachTopics('phil:1', ['philosophy']);
+    await addCards('phil:1', [
+      { front: 'What is virtue?', back: 'Excellence of character.' },
+      { front: 'Who wrote this?', back: 'Marcus Aurelius.' },
+    ]);
+    const due = await driver.all<{ id: string }>('SELECT id FROM cards');
+    await reviewCard(due[0].id, 4);
+    const mastery = await bookMastery('phil:1');
+    expect(mastery.cards).toBe(2);
+    expect(mastery.avgStability).toBeGreaterThan(0);
+    const topics = await topicMastery();
+    expect(topics[0].topic).toBe('philosophy');
+    expect(topics[0].cards).toBe(2);
+  });
+
+  it('orders a path by self-assessed familiarity, then progress, then length', async () => {
+    await saveProfile({
+      goal: null,
+      topics: ['philosophy', 'economics'],
+      familiarity: { philosophy: 'new', economics: 'confident' },
+      minutesPerDay: 15,
+      onboardingComplete: true,
+    });
+    await upsertCatalogueBook(book('econ:1', 'Economics', 500));
+    await upsertCatalogueBook(book('phil:1', 'Philosophy', 300));
+    await upsertCatalogueBook(book('phil:2', 'Short Philosophy', 120));
+    await attachTopics('econ:1', ['economics']);
+    await attachTopics('phil:1', ['philosophy']);
+    await attachTopics('phil:2', ['philosophy']);
+    const plan = await createPlan('Understand things', 'start');
+    await addPlanItem(plan.id, 'econ:1', 0);
+    await addPlanItem(plan.id, 'phil:1', 1);
+    await addPlanItem(plan.id, 'phil:2', 2);
+
+    await rebuildPlanSequence(plan.id);
+
+    const items = await listPlanItems(plan.id);
+    expect(items.map((i) => i.title)).toEqual(['Short Philosophy', 'Philosophy', 'Economics']);
+    expect(items[0].reason).toMatch(/rated this topic new/);
+    expect(items[2].reason).toMatch(/Continue|shorter|momentum|Builds/);
+  });
+
+  it('stores a chapter-scoped summary', async () => {
+    await upsertCatalogueBook(book('b1', 'Book'));
+    const summary = await saveSummary({
+      bookId: 'b1',
+      kind: 'chapter',
+      title: 'Chapter 2',
+      bodyMd: 'Chapter summary.',
+      provider: 'extractive',
+      sectionId: 's2',
+    });
+    const all = await listSummaries('b1');
+    expect(all[0].sectionId).toBe('s2');
+    expect(summary.kind).toBe('chapter');
+  });
+
+  it('groups bookmarks by folder and keeps tags searchable', async () => {
+    await upsertCatalogueBook(book('b1', 'Book'));
+    const folder = await createBookmarkFolder('Thesis', 'gold');
+    const bookmark = await addBookmark('b1', '{}', 'Key passage', {
+      folderId: folder.id,
+      tags: ['attention', 'memory'],
+    });
+    const withMeta = await listBookmarksWithBooks();
+    expect(withMeta[0].folderName).toBe('Thesis');
+    expect(withMeta[0].tags).toEqual(['attention', 'memory']);
+    await updateBookmark(bookmark.id, { tags: ['memory'], folderId: null });
+    const updated = await listBookmarksWithBooks();
+    expect(updated[0].tags).toEqual(['memory']);
+    expect(updated[0].folderName).toBeNull();
+  });
+});
+

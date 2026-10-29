@@ -1,56 +1,199 @@
-# Welcome to your Expo app 👋
+﻿# Freehaven
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+[![Android beta](https://github.com/ItsAakif/freehaven/actions/workflows/android-beta.yml/badge.svg?branch=beta)](https://github.com/ItsAakif/freehaven/actions/workflows/android-beta.yml)
 
-## Get started
+A calm, local-first learning app for the books and documents you already own.
 
-1. Install dependencies
+Freehaven turns reading into a loop: **import → read & annotate → summarise / listen → ask → practise → remember**.
+It is free, open source, account-free, ad-free, and works offline. There is no proprietary catalogue: public-domain
+books come from Project Gutenberg, everything else is either your own file or a link to its official source.
 
-   ```bash
-   npm install
-   ```
+Freehaven was designed after a static study of BeFreed and StoryShots (see `../research/`). It keeps what those apps
+prove people want — immersive reading, generated lessons, narration, conversation, spaced repetition — and drops what
+they get wrong: server-only generation, stacked paywalls, ad-gated AI, retention alarms and content lock-in.
 
-2. Start the app
+---
 
-   ```bash
-   npx expo start
-   ```
+## What works today
 
-In the output, you'll find options to open the app in a
+**Library & discovery**
+- Search Project Gutenberg, Open Library and Google Books by title, author, ISBN or subject, with pagination,
+  in-memory caching, timeout/retry and graceful per-provider failure.
+- Clear separation of metadata, previews, public-domain downloads and external access links.
+- Personal library, save/remove, covers, progress.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+**Import**
+- EPUB (OPF/spine/TOC parsing, sanitised HTML, chapter text), PDF (content-stream text extraction with page numbers),
+  plain text, pasted text and web articles (SSRF-guarded, size-capped, HTML → readable text).
+- Extraction is transactional: a failed import never leaves half a book behind. Extracted text is chunked with
+  character offsets for citations.
 
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+**Reader**
+- Clean, themed, reflowing text reader (warm/light/dark), adjustable size, spacing and typeface.
+- Chapter navigation, in-book full-text search, bookmarks, persisted position and progress.
+- Text selection → highlight with optional note; highlights are stored as stable locators and re-rendered on open.
+- PDF pages keep their page numbers; the original file can be opened in the system viewer for layout fidelity.
 
-## Get a fresh project
+**Learning**
+- Onboarding captures a goal, subjects, a self-rated familiarity per subject and a daily target; Today redirects on
+  first run and shows `minutes / target` (reading minutes derived from position deltas, reviews counted too).
+- Summaries, key takeaways, structured lessons **and chapter summaries** generated **on device** by default
+  (deterministic extractive summariser) or by any OpenAI-compatible endpoint, with short/medium/long length control.
+- Every generated artefact links back to the passages it came from.
+- Flashcard and multiple-choice generation from source text, manual editing/deletion, and a daily review queue
+  scheduled with an in-repo **FSRS-5** implementation (deterministic, no interval fuzzing).
+- Source-grounded Q&A with citations, abstention when the text does not support an answer, and citation validation
+  that rejects fabricated references.
+- Learning paths built from a goal, then **re-ordered from your self-assessment, progress and book length** with a
+  visible reason per item.
+- Topic and per-book mastery bars, plus a unified activity timeline.
 
-When you're ready, run:
+**Listening**
+- Section-by-section narration with the device speech engine, **8 languages and device voice selection**, speed
+  control, sleep timer, resume and progress sync.
+- Optional **studio narration** through an OpenAI-compatible `/audio/speech` endpoint: MP3s cached by content hash,
+  played with `expo-audio`, lock-screen metadata and ±15 s seek. Device narration still works with no key and no
+  network.
+
+**Mindspace & data**
+- Searchable highlights, notes, conversations and lessons in one place, with **bookmark folders and tags**.
+- Activity timeline of reads, reviews, highlights, lessons, chats and imports.
+- Export everything as JSON; delete everything with one confirmed action.
+- Optional daily review reminder via a local notification. No server involved.
+
+---
+
+## Screens
+
+| Tab | Purpose |
+|---|---|
+| **Today** | Greeting, streak, continue-reading, review queue with a 7-day activity strip, free classics, recent notes and lessons. |
+| **Discover** | Learning paths, goal-based path builder, curated public-domain rows by subject, shelf. |
+| **Browse** | Catalogue search across three providers, filters, save, details. |
+| **Mindspace** | Highlights, notes, conversations, lessons, search, export entry point. |
+| **Create** | Import file/link/text, build a learning path, per-book read/listen/ask shortcuts. |
+
+Flow screens: book detail, reader, listener, AI chat, lesson, review, learning path, import, settings.
+
+---
+
+## Stack
+
+| Concern | Choice | Licence |
+|---|---|---|
+| App framework | Expo SDK 58 / React Native 0.88 / React 19, TypeScript strict | MIT |
+| Routing | expo-router (file-based, typed) | MIT |
+| Local data | expo-sqlite (SQLite + FTS5), schema migrations in code | MIT |
+| Files | expo-file-system (new `File`/`Directory` API) | MIT |
+| Reader surface | react-native-webview with a generated, sanitised document + selection bridge | MIT |
+| Import | jszip, fast-xml-parser, pdf-lib, pako | MIT / MIT / MIT / MIT |
+| Speech | expo-speech (device TTS) | MIT |
+| Audio (future file playback) | expo-audio (configured for background playback) | MIT |
+| Notifications | expo-notifications (local only) | MIT |
+| Secrets | expo-secure-store | MIT |
+| State | zustand + expo-sqlite/kv-store persistence | MIT |
+| Tests | Jest + jest-expo, better-sqlite3 for repository tests | MIT |
+
+No dependency requires an account, a paid key or a proprietary backend.
+
+---
+
+## Quick start
 
 ```bash
-npm run reset-project
+cd freehaven
+npm install
+npx expo start          # Expo Go is enough for the core app
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+A **development build** is recommended for the full native surface (background audio, notification channel config,
+custom splash/icon):
 
-### Other setup steps
+```bash
+npx expo run:android    # requires Android SDK + device/emulator
+npx expo run:ios        # requires macOS
+# or: npx eas-cli@latest build --profile development
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+### Quality gates (run before any release)
 
-## Learn more
+```bash
+npx tsc --noEmit        # 0 errors
+npx eslint .            # 0 errors
+npx jest --runInBand    # 91 tests, 16 suites
+npx expo-doctor         # 20/20 checks
+npx expo export --platform android   # production Hermes bundle
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+---
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Beta and continuous integration
 
-## Join the community
+- `beta` is the integration branch. `main` is protected and reserved for reviewed, release-ready code.
+- Every push and pull request targeting `beta` runs `.github/workflows/android-beta.yml`:
+  typecheck, lint, Jest, Expo Doctor, `expo prebuild`, and an **arm64 debug APK** build.
+- The APK is uploaded as the `freehaven-beta-<sha>` artifact (14 days). It is never committed.
+- There is no production release, Play Store publishing or promotion to `main` yet.
+- Download the artifact from the Actions run and install it with `adb install -r app-debug.apk`.
 
-Join our community of developers creating universal apps.
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the branch rules and [`SECURITY.md`](./SECURITY.md) for reporting.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Architecture at a glance
+
+```
+src/
+  app/            expo-router routes (tabs + book/read/listen/chat/summary/review/plan/import/settings)
+  design/         tokens, theme provider, UI primitives, Markdown renderer
+  data/           SQLite driver, migrations, repositories, DatabaseProvider
+  domain/         types, FSRS scheduler, text pipeline, retrieval, quiz generation
+  features/       imports (epub/pdf/url/service), reader HTML, learning actions, data export
+  providers/      catalogue providers (Gutenberg, Open Library, Google Books)
+  ai/             provider contract, extractive engine, OpenAI-compatible client, key storage
+  state/          persisted preferences
+  hooks/          async resource hook
+```
+
+See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for diagrams, the schema and the reasoning.
+See [`REQUIREMENTS.md`](./REQUIREMENTS.md) for the requirement-to-code traceability matrix.
+See [`docs/STATUS.md`](./docs/STATUS.md) for the current milestone report and known blockers.
+See [`docs/ANDROID-BUILD.md`](./docs/ANDROID-BUILD.md) for the SDK setup, build result and device checklist.
+See [`docs/OCR-EVALUATION.md`](./docs/OCR-EVALUATION.md) and [`docs/ACCESSIBILITY.md`](./docs/ACCESSIBILITY.md) for the
+Stage 4 evaluations.
+
+---
+
+## Content policy
+
+- Freehaven **hosts nothing**. Public-domain texts are downloaded from Project Gutenberg at the user's request.
+- Open Library and Google Books are used for **metadata and discovery**; their terms forbid treating them as a
+  source of unrestricted ebook downloads, and Freehaven does not.
+- Imported files remain the user's responsibility. Import is not a copyright exemption.
+- Generated summaries cite their sources and are labelled with the provider that produced them.
+- Cover images are loaded from the provider's CDN under that provider's terms.
+
+## Privacy
+
+- No account, no analytics SDK, no advertising ID, no telemetry.
+- Documents, extracted text, embeddings (none yet), notes and reviews stay in the local SQLite database and app
+  filesystem.
+- AI is **on device by default**. If you configure a remote endpoint, the app clearly shows the provider and sends
+  only the retrieved passages needed for the request. Your key is stored in the device keychain and never bundled.
+
+## Known limitations
+
+- **No device or emulator verification was possible.** The Android SDK was installed and the native project prebuilt
+  during this pass; `docs/ANDROID-BUILD.md` records the build result, install commands and a 12-point device
+  checklist. Typecheck, lint, 91 tests, Expo Doctor and a production bundle pass.
+- PDF support is a **text-layer reader**. Scanned PDFs are rejected with a clear message. An OCR adapter exists but
+  **no engine is enabled**; see `docs/OCR-EVALUATION.md` (clean print about 99.8 percent char accuracy, two-column pages about 47 percent because reading order is lost).
+- EPUB rendering is semantic reflow (paragraphs, headings, emphasis), not publisher layout fidelity.
+- Studio narration is unverified on hardware; device TTS has no lock-screen transport.
+- Adaptive sequencing is rule-based and explainable, not machine-learned.
+- No sync between devices. Export/import JSON is the portability path.
+- Real-time voice conversation is not implemented; the staged plan is documented in `REQUIREMENTS.md` (§H).
+
+## License
+
+MIT. The project was scaffolded from the Expo template (MIT, Â© 650 Industries); all application code is original.
+
+

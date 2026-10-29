@@ -1,0 +1,42 @@
+{
+  "engine": "tesseract.js",
+  "version": "7.0.0",
+  "languages": [
+    "eng"
+  ],
+  "node": "v24.19.0",
+  "platform": "win32",
+  "note": "Synthetic fixtures, Node runtime. Not a mobile measurement.",
+  "results": [
+    {
+      "file": "clean.png",
+      "bytes": 100207,
+      "ms": 2253,
+      "rssBeforeMB": 89,
+      "rssAfterMB": 103,
+      "rssDeltaMB": 14,
+      "confidence": 95,
+      "text": "Attention is the mind's selective hold on one object at the expense of others. William James\ndescribed it as withdrawal from some things in order to deal effectively with others. The metaphor is\nuseful because it treats focus as a budget rather than a switch. Every additional demand on that\nbudget makes the remaining work shallower and slower. A quiet room is not a luxury; it is a\nreduction in the number of competing bids for the same resources. Designing the environment is\ntherefore a more reliable strategy than relying on willpower alone. Habit begins as a deliberate\nchoice and ends as a background process. A cue opens the sequence, a routine carries it, and a\nreward closes the loop. Because the cue is usually environmental, changing the room changes the\nbehaviour more reliably than changing the intention. People who appear disciplined often have\nsimply arranged their surroundings so that the desired action is the easiest one available. The\npractical question is not how to want something more, but how to make it require less friction.\nMemory is reconstructive rather than photographic. Each retrieval reopens a trace and writes it\ndown again with the context of the present moment. That is why confident recollection can still be\nmistaken, and why re-reading feels fluent without producing durable knowledge. Retrieval practice\nis harder and feels less productive, yet it strengthens the trace precisely because it requires effort.\nSpacing those attempts across days gives the system time to forget a little, which is the condition\nunder which the next attempt is useful.\n\nPage 1\n"
+    },
+    {
+      "file": "lowcontrast_skew.png",
+      "bytes": 321912,
+      "ms": 3363,
+      "rssBeforeMB": 103,
+      "rssAfterMB": 109,
+      "rssDeltaMB": 5,
+      "confidence": 95,
+      "text": "Attention is the mind's selective hold on one object at the expense of others. William James described\nit as withdrawal from some things in order to deal effectively with others. The metaphor is useful\nbecause it treats focus as a budget rather than a switch. Every additional demand on that budget makes\nthe remaining work shallower and slower. A quiet room is not a luxury; it is a reduction in the number\nof competing bids for the same resources. Designing the environment is therefore a more reliable\nstrategy than relying on willpower alone. Habit begins as a deliberate choice and ends as a background\nprocess. A cue opens the sequence, a routine carries it, and a reward closes the loop. Because the cue is\nusually environmental, changing the room changes the behaviour more reliably than changing the\nintention. People who appear disciplined often have simply arranged their surroundings so that the\ndesired action is the easiest one available. The practical question is not how to want something more,\nbut how to make it require less friction. Memory is reconstructive rather than photographic. Each\nretrieval reopens a trace and writes it down again with the context of the present moment. That is why\nconfident recollection can still be mistaken, and why re-reading feels fluent without producing durable\nknowledge. Retrieval practice is harder and feels less productive, yet it strengthens the trace precisely\nbecause it requires effort. Spacing those attempts across days gives the system time to forget a little,\nwhich is the condition under which the next attempt is useful.\n"
+    },
+    {
+      "file": "dense_columns.png",
+      "bytes": 89896,
+      "ms": 4147,
+      "rssBeforeMB": 109,
+      "rssAfterMB": 109,
+      "rssDeltaMB": 1,
+      "confidence": 95,
+      "text": "Alibrary is an argument about what deserves to be remembered. Notes are only valuable when they can be found again. A note without\nSelection is never neutral: every shelf excludes more than it includes. a source is a rumour; a note without a question is a transcription. The\nThe useful question is not whether a canon exists, but who assembled strongest notes record the claim, the evidence, and the disagreement it\nit, for what purpose, and what it leaves out. Reading widely is not the provoked. Linking two notes is often more useful than adding a third.\nsame as reading indiscriminately. A good list gives you a sequence, a Over time the graph of links becomes the real document, and the\nreason for the sequence, and permission to stop. Habit begins as a original text becomes its evidence base. Memory is reconstructive\ndeliberate choice and ends as a background process. A cue opens the rather than photographic. Each retrieval reopens a trace and writes it\nsequence, a routine carries it, and a reward closes the loop. Because down again with the context of the present moment. That is why\n\nthe cue is usually environmental, changing the room changes the confident recollection can still be mistaken, and why re-reading feels\nbehaviour more reliably than changing the intention. People who fluent without producing durable knowledge. Retrieval practice is\nappear disciplined often have simply arranged their surroundings so harder and feels less productive, yet it strengthens the trace precisely\nthat the desired action is the easiest one available. The practical because it requires effort. Spacing those attempts across days gives the\nquestion is not how to want something more, but how to make it system time to forget a little, which is the condition under which the\nrequire less friction. next attempt is useful.\n"
+    }
+  ]
+}
