@@ -1,4 +1,4 @@
-# Third-party notices
+﻿# Third-party notices
 
 Freehaven is MIT licensed (see `LICENSE`). It builds on open-source packages. This file lists the direct
 dependencies and the provenance of bundled assets. It is not a substitute for the licence texts shipped inside each
@@ -21,6 +21,20 @@ package under `node_modules` after `npm ci`.
 | `fast-xml-parser` | MIT | OPF/container parsing |
 | `pdf-lib` | MIT | PDF metadata and page count |
 | `pako` | MIT (zlib derivative) | FlateDecode streams |
+
+## Local speech (optional on-device TTS)
+
+| Component | Licence | Notes |
+|---|---|---|
+| `react-native-sherpa-onnx` | MIT | React Native wrapper; native sherpa-onnx is Apache-2.0 |
+| ONNX Runtime | MIT | Inference runtime bundled by sherpa-onnx |
+| Kokoro-82M | Apache-2.0 | Model weights downloaded at the user's request, not redistributed |
+| Piper / VITS voices (e.g. en_US lessac, amy) | MIT | Model weights downloaded at the user's request, not redistributed |
+| espeak-ng data | GPL-3.0 | G2P data dependency used by sherpa-onnx; not linked into Freehaven's own code |
+| FFmpeg / Shine | LGPL-2.1 | Dynamically linked by sherpa-onnx; licence notice and relinking rights apply |
+
+These components are only present when the optional local-voice build includes them. Model archives are fetched
+from the sherpa-onnx release pages; their licences travel with the downloaded files.
 
 ## Development dependencies
 
@@ -52,5 +66,5 @@ package under `node_modules` after `npm ci`.
 
 ## Catalogue metadata
 
-Catalogue results are fetched at runtime from Project Gutenberg/Gutendex, Open Library and Google Books. Their terms
+Catalogue results are fetched at runtime from Project Gutenberg/Gutendex. Its terms
 and attribution requirements apply to that data; Freehaven does not redistribute it.

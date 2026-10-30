@@ -18,13 +18,13 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon, type IconName } from './icon';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { layout, radius, space, type as typo } from './tokens';
 import { useTheme } from './theme';
 import type { Palette } from './tokens';
 
-type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
 
 /* ------------------------------------------------------------------ text */
 
@@ -167,7 +167,7 @@ export function Button({
   label: string;
   onPress?: () => void;
   variant?: 'primary' | 'secondary' | 'ghost' | 'warm' | 'danger';
-  icon?: IoniconName;
+  icon?: IconName;
   loading?: boolean;
   disabled?: boolean;
   full?: boolean;
@@ -222,7 +222,7 @@ export function Button({
       {loading ? (
         <ActivityIndicator size="small" color={fg} />
       ) : icon ? (
-        <Ionicons name={icon} size={18} color={fg} />
+        <Icon name={icon} size={18} color={fg} />
       ) : null}
       <Text style={{ color: fg, fontFamily: sansFamily, fontSize: 15, fontWeight: '600' }}>
         {label}
@@ -239,7 +239,7 @@ export function IconButton({
   color,
   style,
 }: {
-  name: IoniconName;
+  name: IconName;
   label: string;
   onPress?: () => void;
   size?: number;
@@ -265,7 +265,7 @@ export function IconButton({
         style,
       ]}
     >
-      <Ionicons name={name} size={size} color={color ?? palette.ink} />
+      <Icon name={name} size={size} color={color ?? palette.ink} />
     </Pressable>
   );
 }
@@ -333,7 +333,7 @@ export function Chip({
   label: string;
   active?: boolean;
   onPress?: () => void;
-  icon?: IoniconName;
+  icon?: IconName;
 }) {
   const { palette } = useTheme();
   return (
@@ -355,7 +355,7 @@ export function Chip({
         opacity: pressed ? 0.85 : 1,
       })}
     >
-      {icon ? <Ionicons name={icon} size={14} color={active ? palette.accentInk : palette.ink} /> : null}
+      {icon ? <Icon name={icon} size={14} color={active ? palette.accentInk : palette.ink} /> : null}
       <Text
         style={{
           color: active ? palette.accentInk : palette.ink,
@@ -455,7 +455,7 @@ export function EmptyState({
   actionLabel,
   onAction,
 }: {
-  icon?: IoniconName;
+  icon?: IconName;
   title: string;
   body?: string;
   actionLabel?: string;
@@ -474,7 +474,7 @@ export function EmptyState({
           justifyContent: 'center',
         }}
       >
-        <Ionicons name={icon} size={24} color={palette.inkMuted} />
+        <Icon name={icon} size={24} color={palette.inkMuted} />
       </View>
       <AppText variant="subheading" serif style={{ textAlign: 'center' }}>
         {title}
@@ -498,7 +498,7 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
   return (
     <Card style={{ borderColor: palette.dangerSoft, backgroundColor: palette.dangerSoft }}>
       <View style={{ flexDirection: 'row', gap: space.md, alignItems: 'flex-start' }}>
-        <Ionicons name="alert-circle-outline" size={20} color={palette.danger} />
+        <Icon name="alert-circle-outline" size={20} color={palette.danger} />
         <View style={{ flex: 1, gap: 6 }}>
           <AppText variant="bodySm" color={palette.danger}>
             {message}
@@ -690,6 +690,6 @@ export const uiStyles = StyleSheet.create({
   gapMd: { gap: space.md },
 });
 
-export type IconName = IoniconName;
+export type { IconName };
 export type { Palette };
 export type { ImageSourcePropType };

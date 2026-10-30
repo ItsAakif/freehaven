@@ -48,6 +48,8 @@ function HideSplashWhenReady() {
         <Stack.Screen name="summary/[id]" />
         <Stack.Screen name="chat/[id]" />
         <Stack.Screen name="listen/[id]" />
+        <Stack.Screen name="generate/[renditionId]" />
+        <Stack.Screen name="library" />
         <Stack.Screen name="review" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="import" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="settings" />

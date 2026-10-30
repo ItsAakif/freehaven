@@ -3,7 +3,7 @@ import { Pressable, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { File as FsFile } from 'expo-file-system';
 import { WebView as RNWebView } from 'react-native-webview';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/design/icon';
 import {
   Screen,
   AppText,
@@ -422,7 +422,7 @@ export default function ReaderScreen() {  const { id, locator: locatorParam } = 
               <AppText variant="bodySm" numberOfLines={2} style={{ flex: 1, fontWeight: i === index ? '700' : '400' }}>
                 {item.title ?? `Section ${i + 1}`}
               </AppText>
-              {i === index ? <Ionicons name="ellipse" size={7} color={palette.accent} /> : null}
+              {i === index ? <Icon name="ellipse" size={7} color={palette.accent} /> : null}
             </View>
           </Pressable>
         ))}

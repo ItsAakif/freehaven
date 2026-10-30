@@ -1,17 +1,16 @@
 import React, { useCallback, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/design/icon';
 import { Screen, AppText, Card, Cover, SectionHeader, Reveal, Button } from '@/design/ui';
 import { radius, space } from '@/design/tokens';
 import { useTheme } from '@/design/theme';
 import { useAsync } from '@/hooks/useAsync';
 import { searchCatalogue } from '@/providers/catalogue';
 import type { CatalogueBook } from '@/providers/catalogue/types';
-import { listLibrary, upsertCatalogueBook } from '@/data/repositories/books';
+import { countLibrary, upsertCatalogueBook } from '@/data/repositories/books';
 import { listPlans } from '@/data/repositories/learning';
 import { getProfile } from '@/data/repositories/profile';
-import type { Book } from '@/domain/types';
 
 const ROWS = [
   { title: 'Philosophy', subject: 'philosophy', blurb: 'Stoics, ethics and first principles' },
@@ -21,7 +20,7 @@ const ROWS = [
 
 type DiscoverData = {
   rows: { title: string; blurb: string; books: CatalogueBook[] }[];
-  library: Book[];
+  libraryCount: number;
   plans: { id: string; title: string; goal?: string | null; itemCount: number; doneCount: number }[];
   failures: number;
 };
@@ -38,7 +37,7 @@ export default function DiscoverScreen() {
   );
 
   const state = useAsync<DiscoverData>(async () => {
-    const [library, plans, profile] = await Promise.all([listLibrary(), listPlans(), getProfile()]);
+    const [libraryCount, plans, profile] = await Promise.all([countLibrary(), listPlans(), getProfile()]);
     const results = await Promise.allSettled(
       ROWS.map((row) => searchCatalogue({ subject: row.subject, limit: 8 }, ['gutendex'])),
     );
@@ -67,7 +66,7 @@ export default function DiscoverScreen() {
         failures += 1;
       }
     });
-    return { rows, library: library.slice(0, 6), plans, failures };
+    return { rows, libraryCount, plans, failures };
   }, [tick]);
 
   const openCatalogue = async (book: CatalogueBook) => {
@@ -94,6 +93,31 @@ export default function DiscoverScreen() {
         </AppText>
       </View>
 
+      <Reveal>
+        <Card
+          onPress={() => router.push('/library')}
+          accessibilityLabel="Your library"
+          style={{ backgroundColor: palette.surfaceAlt, borderColor: palette.line }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
+            <View style={{ width: 44, height: 44, borderRadius: radius.md, backgroundColor: palette.surface, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="library-outline" size={20} color={palette.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <AppText variant="subheading" serif>
+                Your library
+              </AppText>
+              <AppText variant="caption" muted>
+                {state.data && state.data.libraryCount > 0
+                  ? `${state.data.libraryCount} book${state.data.libraryCount === 1 ? '' : 's'} saved · reading and narration progress`
+                  : 'Saved books, reading progress and narration'}
+              </AppText>
+            </View>
+            <Icon name="chevron-forward" size={18} color={palette.inkFaint} />
+          </View>
+        </Card>
+      </Reveal>
+
       {state.data?.plans.length ? (
         <Reveal>
           <SectionHeader title="Your learning paths" style={{ marginTop: space.lg }} />
@@ -107,7 +131,7 @@ export default function DiscoverScreen() {
                   style={{ width: 240, backgroundColor: palette.accentSoft, borderColor: palette.accentSoft }}
                 >
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Ionicons name="map-outline" size={18} color={palette.accent} />
+                    <Icon name="map-outline" size={18} color={palette.accent} />
                     <AppText variant="caption" color={palette.accent}>
                       {Math.round(pct * 100)}%
                     </AppText>
@@ -135,7 +159,7 @@ export default function DiscoverScreen() {
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
             <View style={{ width: 44, height: 44, borderRadius: radius.md, backgroundColor: palette.surface, alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="sparkles-outline" size={20} color={palette.warm} />
+              <Icon name="sparkles-outline" size={20} color={palette.warm} />
             </View>
             <View style={{ flex: 1 }}>
               <AppText variant="subheading" serif>
@@ -145,7 +169,7 @@ export default function DiscoverScreen() {
                 “Understand Stoicism” → a short, ordered reading list.
               </AppText>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={palette.inkFaint} />
+            <Icon name="chevron-forward" size={18} color={palette.inkFaint} />
           </View>
         </Card>
       </Reveal>
@@ -198,32 +222,9 @@ export default function DiscoverScreen() {
         </Card>
       ) : null}
 
-      {state.data?.library.length ? (
-        <Reveal delay={140}>
-          <SectionHeader title="On your shelf" actionLabel="Library" onAction={() => router.push('/browse')} style={{ marginTop: space.xl }} />
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginTop: space.sm }}>
-            {state.data.library.map((book) => (
-              <Pressable
-                key={book.id}
-                onPress={() => router.push({ pathname: '/book/[id]', params: { id: book.id } })}
-                accessibilityRole="button"
-                accessibilityLabel={book.title}
-                style={{ width: '30%' }}
-              >
-                <Cover uri={book.coverUrl} title={book.title} width={100} height={144} style={{ width: '100%' }} />
-                <AppText variant="caption" numberOfLines={2} style={{ marginTop: 6 }}>
-                  {book.title}
-                </AppText>
-              </Pressable>
-            ))}
-          </View>
-        </Reveal>
-      ) : null}
-
       <View style={{ marginTop: space.xl }}>
         <AppText variant="caption" faint>
-          Catalogue metadata from Project Gutenberg and Open Library. Freehaven hosts only public-domain texts; other
-          titles link to their official source.
+          Catalogue metadata from Project Gutenberg. Freehaven hosts only public-domain texts.
         </AppText>
       </View>
     </Screen>

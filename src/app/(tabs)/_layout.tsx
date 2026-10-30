@@ -1,12 +1,12 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon, type IconName } from '@/design/icon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/design/theme';
 import { radius, space } from '@/design/tokens';
 
-type IconName = React.ComponentProps<typeof Ionicons>['name'];
+
 
 const TABS: { name: string; href: string; label: string; icon: IconName; activeIcon: IconName }[] = [
   { name: 'index', href: '/', label: 'Today', icon: 'sunny-outline', activeIcon: 'sunny' },
@@ -45,15 +45,17 @@ export default function TabsLayout() {
                 accessibilityLabel={tab.label}
                 accessibilityState={{ selected: focused }}
                 onPress={() => router.navigate(tab.href as never)}
-                style={styles.item}
+                style={({ pressed }) => [
+                  styles.item,
+                  focused && { backgroundColor: palette.accentSoft },
+                  pressed && { opacity: 0.82 },
+                ]}
               >
-                <View style={[styles.pill, focused && { backgroundColor: palette.accentSoft }]}>
-                  <Ionicons
-                    name={focused ? tab.activeIcon : tab.icon}
-                    size={21}
-                    color={focused ? palette.accent : palette.inkMuted}
-                  />
-                </View>
+                <Icon
+                  name={focused ? tab.activeIcon : tab.icon}
+                  size={21}
+                  color={focused ? palette.accent : palette.inkMuted}
+                />
                 <Text
                   style={{
                     fontSize: 10.5,
@@ -85,13 +87,15 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: space.sm,
     paddingHorizontal: space.sm,
+    gap: 4,
   },
-  item: { flex: 1, alignItems: 'center', gap: 3, minHeight: 48 },
-  pill: {
-    width: 44,
-    height: 28,
-    borderRadius: radius.pill,
+  item: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 7,
+    minHeight: 54,
+    borderRadius: radius.lg,
   },
 });

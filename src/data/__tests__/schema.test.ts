@@ -3,15 +3,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { migrate } from '@/data/db';
+import { MIGRATION_1, MIGRATION_5, MIGRATION_6, MIGRATIONS } from '@/data/schema';
 import { createTestDriver } from '@/data/__tests__/testDriver';
 
 describe('schema and migrations', () => {
   it('creates the full schema and records the version', async () => {
     const driver = createTestDriver();
     const version = await migrate(driver);
-    expect(version).toBe(3);
+    expect(version).toBe(6);
     const pragma = await driver.first<{ user_version: number }>('PRAGMA user_version');
-    expect(pragma?.user_version).toBe(3);
+    expect(pragma?.user_version).toBe(6);
 
     const tables = await driver.all<{ name: string }>(
       "SELECT name FROM sqlite_master WHERE type IN ('table','view') ORDER BY name",
@@ -31,9 +32,14 @@ describe('schema and migrations', () => {
       'messages',
       'plans',
       'jobs',
+      'job_units',
       'audio_queue',
       'user_profile',
       'activity_events',
+      'renditions',
+      'rendition_segments',
+      'rendition_progress',
+      'narration_engines',
     ]) {
       expect(names).toContain(expected);
     }
@@ -88,6 +94,63 @@ describe('schema and migrations', () => {
     await driver.close();
   });
 
+  it('cascades renditions, segments and progress from a book', async () => {
+    const driver = createTestDriver();
+    await migrate(driver);
+    await driver.run(
+      "INSERT INTO books (id, title, source, access, created_at, updated_at) VALUES ('b','Book','import','user_import',0,0)",
+    );
+    await driver.run(
+      `INSERT INTO renditions (id, book_id, language, style_id, length_preset, created_at, updated_at)
+       VALUES ('r','b','en','fireside','15',0,0)`,
+    );
+    await driver.run(
+      `INSERT INTO rendition_segments (id, rendition_id, ordinal, text, created_at, updated_at)
+       VALUES ('s','r',0,'hello',0,0)`,
+    );
+    await driver.run(
+      "INSERT INTO rendition_progress (rendition_id, updated_at) VALUES ('r',0)",
+    );
+    await driver.run("DELETE FROM books WHERE id = 'b'");
+    expect(await driver.all('SELECT * FROM renditions')).toHaveLength(0);
+    expect(await driver.all('SELECT * FROM rendition_segments')).toHaveLength(0);
+    expect(await driver.all('SELECT * FROM rendition_progress')).toHaveLength(0);
+    await driver.close();
+  });
+
+  it('keeps audio_queue data across the v4 to v5 upgrade', async () => {
+    const driver = createTestDriver();
+    await driver.exec(MIGRATION_1);
+    for (const migration of MIGRATIONS.filter((m) => m.version > 1 && m.version <= 4)) {
+      await driver.exec(migration.sql);
+    }
+    await driver.exec('PRAGMA user_version = 4');
+    await driver.run(
+      "INSERT INTO books (id, title, source, access, created_at, updated_at) VALUES ('b','Book','import','user_import',0,0)",
+    );
+    await driver.run(
+      `INSERT INTO audio_queue (id, book_id, section_id, ordinal, status, file_path, created_at, updated_at)
+       VALUES ('q','b','s1',0,'ready','/tmp/a.mp3',0,0)`,
+    );
+
+    expect(await migrate(driver)).toBe(6);
+    const rows = await driver.all<{ id: string; file_path: string }>('SELECT * FROM audio_queue');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].file_path).toBe('/tmp/a.mp3');
+    const tables = await driver.all<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table'",
+    );
+    expect(tables.map((t) => t.name)).toEqual(
+      expect.arrayContaining(['renditions', 'rendition_segments', 'rendition_progress', 'narration_engines']),
+    );
+    await driver.close();
+  });
+
+  it('keeps migration 5 additive', () => {
+    expect(MIGRATION_5.toUpperCase()).not.toMatch(/\bDROP\b/);
+    expect(MIGRATION_5.toUpperCase()).not.toMatch(/ALTER\s+TABLE\s+AUDIO_QUEUE/);
+  });
+
   it('clears the FTS index when a book is deleted by cascade', async () => {
     const driver = createTestDriver();
     await migrate(driver);
@@ -125,5 +188,166 @@ describe('schema and migrations', () => {
       }
     }
   });
-});
 
+  it('upgrades a v1 database in place and preserves bookmarks', async () => {
+    const driver = createTestDriver();
+    await driver.exec(MIGRATION_1);
+    await driver.exec('PRAGMA user_version = 1');
+    await driver.run(
+      "INSERT INTO books (id, title, source, access, created_at, updated_at) VALUES ('b','Old Book','import','user_import',0,0)",
+    );
+    await driver.run(
+      "INSERT INTO bookmarks (id, book_id, locator, label, created_at) VALUES ('bm1','b','{}','Old bookmark',1)",
+    );
+    await migrate(driver);
+    const columns = await driver.all<{ name: string }>('PRAGMA table_info(bookmarks)');
+    expect(columns.map((c) => c.name)).toContain('folder_id');
+    const bookmarks = await driver.all<{ label: string }>('SELECT * FROM bookmarks');
+    expect(bookmarks[0].label).toBe('Old bookmark');
+    const profileColumns = await driver.all<{ name: string }>('PRAGMA table_info(user_profile)');
+    expect(profileColumns.map((c) => c.name)).toContain('display_name');
+    const tables = await driver.all<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table'",
+    );
+    expect(tables.map((t) => t.name)).toEqual(
+      expect.arrayContaining(['renditions', 'rendition_segments', 'rendition_progress', 'narration_engines']),
+    );
+    await driver.close();
+  });
+
+  it('rejects a database newer than the binary', async () => {
+    const driver = createTestDriver();
+    await migrate(driver);
+    await driver.exec('PRAGMA user_version = 99');
+    await expect(migrate(driver)).rejects.toThrow(/newer/);
+    await driver.close();
+  });
+
+  it('adds every generation column and the job_units table', async () => {
+    const driver = createTestDriver();
+    await migrate(driver);
+    expect(await driver.first<{ user_version: number }>('PRAGMA user_version')).toMatchObject({
+      user_version: 6,
+    });
+    const tables = await driver.all<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table'",
+    );
+    expect(tables.map((t) => t.name)).toContain('job_units');
+
+    const columns = (await driver.all<{ name: string }>('PRAGMA table_info(jobs)')).map(
+      (column) => column.name,
+    );
+    for (const expected of [
+      'rendition_id',
+      'stage',
+      'progress',
+      'units_done',
+      'units_total',
+      'eta_remaining_ms',
+      'eta_low_ms',
+      'eta_high_ms',
+      'started_at',
+      'heartbeat_at',
+      'finished_at',
+      'cancel_requested',
+      'script_hash',
+      'synth_hash',
+    ]) {
+      expect(columns).toContain(expected);
+    }
+    await driver.close();
+  });
+
+  it('preserves an existing jobs row across the v5 to v6 upgrade', async () => {
+    const driver = createTestDriver();
+    await driver.exec(MIGRATION_1);
+    for (const migration of MIGRATIONS.filter((m) => m.version > 1 && m.version <= 5)) {
+      await driver.exec(migration.sql);
+    }
+    await driver.exec('PRAGMA user_version = 5');
+    await driver.run(
+      `INSERT INTO jobs (id, type, payload_json, status, attempts, created_at, updated_at)
+       VALUES ('legacy','import','{}','queued',0,1,2)`,
+    );
+
+    expect(await migrate(driver)).toBe(6);
+    const row = await driver.first<{
+      id: string;
+      type: string;
+      progress: number;
+      units_total: number;
+      cancel_requested: number;
+    }>('SELECT * FROM jobs WHERE id = ?', ['legacy']);
+    expect(row).toMatchObject({
+      id: 'legacy',
+      type: 'import',
+      progress: 0,
+      units_total: 0,
+      cancel_requested: 0,
+    });
+    await driver.close();
+  });
+
+  async function seedRendition(driver: ReturnType<typeof createTestDriver>): Promise<void> {
+    await driver.run(
+      "INSERT INTO books (id, title, source, access, created_at, updated_at) VALUES ('b','Book','import','user_import',0,0)",
+    );
+    await driver.run(
+      `INSERT INTO renditions (id, book_id, language, style_id, length_preset, created_at, updated_at)
+       VALUES ('r','b','en','fireside','15',0,0)`,
+    );
+  }
+
+  it('allows only one active job per rendition, and any number with a null rendition', async () => {
+    const driver = createTestDriver();
+    await migrate(driver);
+    await seedRendition(driver);
+    await driver.run(
+      `INSERT INTO jobs (id, type, status, rendition_id, created_at, updated_at)
+       VALUES ('j1','narration.generate','running','r',0,0)`,
+    );
+    await expect(
+      driver.run(
+        `INSERT INTO jobs (id, type, status, rendition_id, created_at, updated_at)
+         VALUES ('j2','narration.generate','running','r',0,0)`,
+      ),
+    ).rejects.toThrow(/UNIQUE/);
+
+    await driver.run(
+      `INSERT INTO jobs (id, type, status, rendition_id, created_at, updated_at)
+       VALUES ('j3','import','running',NULL,0,0)`,
+    );
+    await driver.run(
+      `INSERT INTO jobs (id, type, status, rendition_id, created_at, updated_at)
+       VALUES ('j4','import','running',NULL,0,0)`,
+    );
+    expect(await driver.all("SELECT id FROM jobs WHERE rendition_id IS NULL")).toHaveLength(2);
+    await driver.close();
+  });
+
+  it('cascades jobs and job units when a rendition is deleted', async () => {
+    const driver = createTestDriver();
+    await migrate(driver);
+    await seedRendition(driver);
+    await driver.run(
+      `INSERT INTO jobs (id, type, status, rendition_id, created_at, updated_at)
+       VALUES ('j1','narration.generate','running','r',0,0)`,
+    );
+    await driver.run(
+      `INSERT INTO job_units (id, job_id, stage, ordinal, input_key, created_at, updated_at)
+       VALUES ('u1','j1','map',0,'key',0,0)`,
+    );
+    await driver.run("DELETE FROM renditions WHERE id = 'r'");
+    expect(await driver.all('SELECT * FROM jobs')).toHaveLength(0);
+    expect(await driver.all('SELECT * FROM job_units')).toHaveLength(0);
+    expect(await driver.all('PRAGMA foreign_key_check')).toEqual([]);
+    await driver.close();
+  });
+
+  it('keeps migration 6 additive', () => {
+    // Comments mention "no column drop"; only the executable SQL is checked.
+    const sql = MIGRATION_6.replace(/--[^\n]*/g, '').toUpperCase();
+    expect(sql).not.toMatch(/\bDROP\b/);
+    expect(sql).not.toMatch(/ALTER\s+TABLE\s+\w+\s+RENAME/);
+  });
+});

@@ -196,3 +196,17 @@ export interface Job {
 }
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
+
+export type {
+  LibraryEntry,
+  LibraryShelf,
+  NarrationLength,
+  NarrationStyleId,
+  QueuedSegment,
+  Rendition,
+  RenditionEngine,
+  RenditionProgress,
+  RenditionSegment,
+  RenditionStatus,
+  SegmentStatus,
+} from './narration';

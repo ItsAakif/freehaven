@@ -485,7 +485,7 @@ export async function enqueueJob(type: string, payload: Record<string, unknown>)
 
 export async function updateJob(
   id: string,
-  status: 'queued' | 'running' | 'done' | 'failed',
+  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled',
   error?: string | null,
 ): Promise<void> {
   await db().run(
@@ -494,14 +494,32 @@ export async function updateJob(
   );
 }
 
-export async function listActiveJobs(): Promise<{ id: string; type: string; status: string; error: string | null }[]> {
+export async function listActiveJobs(): Promise<{
+  id: string;
+  type: string;
+  status: string;
+  error: string | null;
+  rendition_id: string | null;
+  stage: string | null;
+  progress: number;
+  units_done: number;
+  units_total: number;
+  eta_remaining_ms: number | null;
+  eta_low_ms: number | null;
+  eta_high_ms: number | null;
+  heartbeat_at: number | null;
+}[]> {
   return db().all(
-    `SELECT id, type, status, error FROM jobs WHERE status IN ('queued','running','failed') ORDER BY created_at DESC LIMIT 20`,
+    `SELECT id, type, status, error, rendition_id, stage, progress, units_done, units_total,
+            eta_remaining_ms, eta_low_ms, eta_high_ms, heartbeat_at
+       FROM jobs WHERE status IN ('queued','running','failed') ORDER BY created_at DESC LIMIT 20`,
   );
 }
 
 /** Remove library content and everything derived from it. Preferences survive. */
 export async function deleteAllUserData(): Promise<void> {
+  // narration_engines is deliberately untouched: installed model bundles are
+  // device state, not user library content (see renditions-and-library.md §8.3).
   await db().transaction(async () => {
     await db().run('DELETE FROM audio_queue');
     await db().run('DELETE FROM books');
@@ -527,7 +545,7 @@ export async function deleteAllUserData(): Promise<void> {
 
 /** Row counts for the storage summary in Settings. */
 export async function dataCounts(): Promise<Record<string, number>> {
-  const tables = ['books', 'documents', 'chunks', 'highlights', 'cards', 'reviews', 'summaries', 'conversations'];
+  const tables = ['books', 'documents', 'chunks', 'highlights', 'cards', 'reviews', 'summaries', 'conversations', 'renditions'];
   const out: Record<string, number> = {};
   for (const table of tables) {
     const row = await db().first<{ count: number }>(`SELECT COUNT(*) as count FROM ${table}`);

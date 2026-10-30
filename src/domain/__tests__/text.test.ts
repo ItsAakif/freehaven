@@ -63,4 +63,16 @@ describe('text utilities', () => {
     expect(defs[0].term).toMatch(/Attention/);
     expect(topKeywords(text, 3)).toContain('attention');
   });
+
+  it('splits CJK text on fullwidth terminators', () => {
+    expect(splitSentences('今日は晴れです。明日は雨です。')).toEqual([
+      '今日は晴れです。',
+      '明日は雨です。',
+    ]);
+    expect(splitSentences('今日は晴れです！明日は雨です？')).toHaveLength(2);
+  });
+
+  it('keeps ASCII output byte-identical', () => {
+    expect(splitSentences('A sentence. Another!')).toEqual(['A sentence.', 'Another!']);
+  });
 });

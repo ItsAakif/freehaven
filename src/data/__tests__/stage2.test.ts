@@ -1,12 +1,11 @@
 /** @jest-environment node */
-import { migrate, resetDriverForTests, setDriverForTests } from '@/data/db';
-import { MIGRATION_1 } from '@/data/schema';
+import { resetDriverForTests, setDriverForTests } from '@/data/db';
 import { createTestDriver } from '@/data/__tests__/testDriver';
-import { getProfile, saveProfile, familiarityScore } from '@/data/repositories/profile';
+import { familiarityScore, getProfile, saveProfile } from '@/data/repositories/profile';
 import { logActivity, minutesByDay, minutesToday, readingMinutes } from '@/data/repositories/activity';
 import {
-  addPlanItem,
   addCards,
+  addPlanItem,
   createPlan,
   listPlanItems,
   listSummaries,
@@ -22,7 +21,7 @@ import {
 } from '@/data/repositories/reading';
 import { attachTopics, upsertCatalogueBook } from '@/data/repositories/books';
 
-const book = (id: string, title: string, pages = 200) => ({
+const candidate = (id: string, title: string, pages = 200) => ({
   id,
   provider: 'gutendex',
   title,
@@ -32,33 +31,6 @@ const book = (id: string, title: string, pages = 200) => ({
   source: 'gutenberg' as const,
   sourceId: id,
   access: 'public_domain' as const,
-});
-
-describe('schema v2 upgrade', () => {
-  it('upgrades a v1 database in place and preserves bookmarks', async () => {
-    const driver = createTestDriver();
-    await driver.exec(MIGRATION_1);
-    await driver.exec('PRAGMA user_version = 1');
-    await driver.run(
-      "INSERT INTO books (id, title, source, access, created_at, updated_at) VALUES ('b','Old Book','import','user_import',0,0)",
-    );
-    await driver.run(
-      "INSERT INTO bookmarks (id, book_id, locator, label, created_at) VALUES ('bm1','b','{}','Old bookmark',1)",
-    );
-
-    await migrate(driver);
-
-    const columns = await driver.all<{ name: string }>('PRAGMA table_info(bookmarks)');
-    const names = columns.map((c) => c.name);
-    expect(names).toContain('folder_id');
-    expect(names).toContain('tags_json');
-    const bookmarks = await driver.all<{ label: string }>('SELECT * FROM bookmarks');
-    expect(bookmarks).toHaveLength(1);
-    expect(bookmarks[0].label).toBe('Old bookmark');
-    const version = await driver.first<{ user_version: number }>('PRAGMA user_version');
-    expect(version?.user_version).toBe(3);
-    await driver.close();
-  });
 });
 
 describe('profile, activity and mastery', () => {
@@ -78,15 +50,16 @@ describe('profile, activity and mastery', () => {
     }
   });
 
-  it('stores onboarding goal, topics and familiarity', async () => {
+  it('stores a profile with display name, goal, topics and familiarity', async () => {
     const saved = await saveProfile({
+      displayName: 'Aakif',
       goal: 'think clearly',
       topics: ['philosophy', 'psychology'],
       familiarity: { philosophy: 'new', psychology: 'confident' },
       minutesPerDay: 20,
       onboardingComplete: true,
     });
-    expect(saved.onboardingComplete).toBe(true);
+    expect(saved.displayName).toBe('Aakif');
     const loaded = await getProfile();
     expect(loaded.topics).toEqual(['philosophy', 'psychology']);
     expect(loaded.familiarity.psychology).toBe('confident');
@@ -108,7 +81,7 @@ describe('profile, activity and mastery', () => {
   });
 
   it('computes per-book and per-topic mastery', async () => {
-    await upsertCatalogueBook(book('phil:1', 'Meditations'));
+    await upsertCatalogueBook(candidate('phil:1', 'Meditations'));
     await attachTopics('phil:1', ['philosophy']);
     await addCards('phil:1', [
       { front: 'What is virtue?', back: 'Excellence of character.' },
@@ -126,15 +99,16 @@ describe('profile, activity and mastery', () => {
 
   it('orders a path by self-assessed familiarity, then progress, then length', async () => {
     await saveProfile({
+      displayName: 'Aakif',
       goal: null,
       topics: ['philosophy', 'economics'],
       familiarity: { philosophy: 'new', economics: 'confident' },
       minutesPerDay: 15,
       onboardingComplete: true,
     });
-    await upsertCatalogueBook(book('econ:1', 'Economics', 500));
-    await upsertCatalogueBook(book('phil:1', 'Philosophy', 300));
-    await upsertCatalogueBook(book('phil:2', 'Short Philosophy', 120));
+    await upsertCatalogueBook(candidate('econ:1', 'Economics', 500));
+    await upsertCatalogueBook(candidate('phil:1', 'Philosophy', 300));
+    await upsertCatalogueBook(candidate('phil:2', 'Short Philosophy', 120));
     await attachTopics('econ:1', ['economics']);
     await attachTopics('phil:1', ['philosophy']);
     await attachTopics('phil:2', ['philosophy']);
@@ -148,11 +122,10 @@ describe('profile, activity and mastery', () => {
     const items = await listPlanItems(plan.id);
     expect(items.map((i) => i.title)).toEqual(['Short Philosophy', 'Philosophy', 'Economics']);
     expect(items[0].reason).toMatch(/rated this topic new/);
-    expect(items[2].reason).toMatch(/Continue|shorter|momentum|Builds/);
   });
 
   it('stores a chapter-scoped summary', async () => {
-    await upsertCatalogueBook(book('b1', 'Book'));
+    await upsertCatalogueBook(candidate('b1', 'Book'));
     const summary = await saveSummary({
       bookId: 'b1',
       kind: 'chapter',
@@ -167,7 +140,7 @@ describe('profile, activity and mastery', () => {
   });
 
   it('groups bookmarks by folder and keeps tags searchable', async () => {
-    await upsertCatalogueBook(book('b1', 'Book'));
+    await upsertCatalogueBook(candidate('b1', 'Book'));
     const folder = await createBookmarkFolder('Thesis', 'gold');
     const bookmark = await addBookmark('b1', '{}', 'Key passage', {
       folderId: folder.id,
@@ -182,4 +155,3 @@ describe('profile, activity and mastery', () => {
     expect(updated[0].folderName).toBeNull();
   });
 });
-

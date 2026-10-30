@@ -59,6 +59,17 @@
           "color": "#2F5D50"
         }
       ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 37,
+            "buildToolsVersion": "37.0.0",
+            "targetSdkVersion": 36,
+            "minSdkVersion": 24
+          }
+        }
+      ],
       "expo-asset"
     ],
     "experiments": {

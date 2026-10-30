@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Redirect, router, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/design/icon';
 import { Screen, AppText, Card, Button, Cover, ProgressBar, SectionHeader, IconButton, Reveal, EmptyState } from '@/design/ui';
 import { radius, space } from '@/design/tokens';
 import { useTheme } from '@/design/theme';
@@ -96,6 +96,9 @@ export default function TodayScreen() {
   const data = state.data;
   const today = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   const maxWeek = Math.max(1, ...(data?.week ?? [1]));
+  const greetingText = data?.profile.displayName
+    ? `${greeting()}, ${data.profile.displayName}`
+    : greeting();
 
   return (
     <Screen>
@@ -105,7 +108,7 @@ export default function TodayScreen() {
             {today}
           </AppText>
           <AppText variant="display" serif style={{ marginTop: 2 }}>
-            {greeting()}
+            {greetingText}
           </AppText>
           <AppText variant="bodySm" muted style={{ marginTop: 4 }}>
             {data?.streak
@@ -114,6 +117,7 @@ export default function TodayScreen() {
           </AppText>
         </View>
         <View style={{ flexDirection: 'row' }}>
+          <IconButton name="library-outline" label="Your library" onPress={() => router.push('/library')} />
           <IconButton name="search" label="Browse the catalogue" onPress={() => router.push('/browse')} />
           <IconButton name="settings-outline" label="Settings" onPress={() => router.push('/settings')} />
         </View>
@@ -232,7 +236,7 @@ export default function TodayScreen() {
                 justifyContent: 'center',
               }}
             >
-              <Ionicons name={data?.due ? 'albums' : 'checkmark-done'} size={22} color={data?.due ? palette.accent : palette.inkMuted} />
+              <Icon name={data?.due ? 'albums' : 'checkmark-done'} size={22} color={data?.due ? palette.accent : palette.inkMuted} />
             </View>
             <View style={{ flex: 1 }}>
               <AppText variant="subheading" serif>
@@ -242,7 +246,7 @@ export default function TodayScreen() {
                 {data?.due ? 'Spaced repetition, scheduled on device.' : 'New cards appear here after you make them.'}
               </AppText>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={palette.inkFaint} />
+            <Icon name="chevron-forward" size={18} color={palette.inkFaint} />
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6, height: 42, marginTop: space.lg }}>
@@ -324,7 +328,7 @@ export default function TodayScreen() {
                 style={{ paddingVertical: space.md }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
-                  <Ionicons name="document-text-outline" size={18} color={palette.accent} />
+                  <Icon name="document-text-outline" size={18} color={palette.accent} />
                   <View style={{ flex: 1 }}>
                     <AppText variant="bodySm" numberOfLines={1} style={{ fontWeight: '600' }}>
                       {summary.title}
@@ -333,7 +337,7 @@ export default function TodayScreen() {
                       {summary.bookTitle} · {summary.kind}
                     </AppText>
                   </View>
-                  <Ionicons name="chevron-forward" size={16} color={palette.inkFaint} />
+                  <Icon name="chevron-forward" size={16} color={palette.inkFaint} />
                 </View>
               </Card>
             ))}

@@ -3,9 +3,17 @@ const { defineConfig } = require('eslint/config');
 const expoConfig = require('eslint-config-expo/flat');
 
 module.exports = defineConfig([
+  {
+    ignores: [
+      'dist/*',
+      'dist-android/*',
+      'coverage/*',
+      '.eslint-report.json',
+      '.harness/**',
+    ],
+  },
   expoConfig,
   {
-    ignores: ['dist/*', 'dist-android/*', 'coverage/*', '.eslint-report.json'],
     rules: {
       // Screens load data from SQLite on mount/focus and store the result in
       // component state. That is the intended pattern here; the React Compiler

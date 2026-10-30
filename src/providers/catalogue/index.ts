@@ -1,15 +1,11 @@
-import { openLibraryProvider } from './openlibrary';
 import { gutendexProvider } from './gutendex';
-import { googleBooksProvider } from './googlebooks';
 import type { CatalogueBook, CataloguePage, CatalogueProvider, CatalogueQuery } from './types';
 
 export const catalogueProviders: Record<string, CatalogueProvider> = {
-  openlibrary: openLibraryProvider,
   gutendex: gutendexProvider,
-  googlebooks: googleBooksProvider,
 };
 
-export const DEFAULT_PROVIDERS = ['gutendex', 'openlibrary'] as const;
+export const DEFAULT_PROVIDERS = ['gutendex'] as const;
 
 /** Merge provider results, de-duplicating by title+author while keeping order. */
 export function mergeCataloguePages(pages: CataloguePage[]): CatalogueBook[] {

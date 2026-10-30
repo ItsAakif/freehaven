@@ -4,6 +4,7 @@ import { newId } from '@/lib/id';
 export type Familiarity = 'new' | 'some' | 'confident';
 
 export type Profile = {
+  displayName: string | null;
   goal: string | null;
   topics: string[];
   familiarity: Record<string, Familiarity>;
@@ -14,6 +15,7 @@ export type Profile = {
 };
 
 export const DEFAULT_PROFILE: Profile = {
+  displayName: null,
   goal: null,
   topics: [],
   familiarity: {},
@@ -25,6 +27,7 @@ export const DEFAULT_PROFILE: Profile = {
 
 type ProfileRow = {
   id: string;
+  display_name: string | null;
   goal: string | null;
   topics_json: string | null;
   familiarity_json: string | null;
@@ -38,6 +41,7 @@ export async function getProfile(): Promise<Profile> {
   const row = await db().first<ProfileRow>("SELECT * FROM user_profile WHERE id = 'default'");
   if (!row) return DEFAULT_PROFILE;
   return {
+    displayName: row.display_name,
     goal: row.goal,
     topics: safeJson<string[]>(row.topics_json, []),
     familiarity: safeJson<Record<string, Familiarity>>(row.familiarity_json, {}),
@@ -68,12 +72,14 @@ export async function saveProfile(patch: Partial<Profile>): Promise<Profile> {
     createdAt: current.createdAt || Date.now(),
   };
   await db().run(
-    `INSERT INTO user_profile (id, goal, topics_json, familiarity_json, minutes_per_day, onboarding_complete, created_at, updated_at)
-     VALUES ('default', ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET goal=excluded.goal, topics_json=excluded.topics_json,
-       familiarity_json=excluded.familiarity_json, minutes_per_day=excluded.minutes_per_day,
-       onboarding_complete=excluded.onboarding_complete, updated_at=excluded.updated_at`,
+    `INSERT INTO user_profile (id, display_name, goal, topics_json, familiarity_json, minutes_per_day, onboarding_complete, created_at, updated_at)
+     VALUES ('default', ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name, goal=excluded.goal,
+       topics_json=excluded.topics_json, familiarity_json=excluded.familiarity_json,
+       minutes_per_day=excluded.minutes_per_day, onboarding_complete=excluded.onboarding_complete,
+       updated_at=excluded.updated_at`,
     [
+      next.displayName,
       next.goal,
       JSON.stringify(next.topics),
       JSON.stringify(next.familiarity),

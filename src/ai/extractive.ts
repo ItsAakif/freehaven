@@ -8,7 +8,14 @@
  */
 
 import { ABSTAIN_TEXT, type AiProvider, type AiRequest, type AiResponse } from './types';
-import { extractiveSummary, splitSentences, topKeywords, truncate } from '@/domain/text';
+import {
+  extractiveSummary,
+  splitSentences,
+  tokenize,
+  topKeywords,
+  truncate,
+  wordCount,
+} from '@/domain/text';
 import { bm25 } from '@/domain/retrieval';
 import type { Citation } from '@/domain/types';
 
@@ -31,6 +38,52 @@ function lengthToSentences(length: AiRequest['length']): number {
   if (length === 'short') return 4;
   if (length === 'long') return 10;
   return 6;
+}
+
+type NoteItem = {
+  text: string;
+  source: AiRequest['sources'][number];
+  order: number;
+};
+
+/** Split every source into sentences and rank by overlap with the book keywords. */
+function noteItems(request: AiRequest, limit: number): NoteItem[] {
+  const joined = request.sources.map((source) => source.text).join('\n\n');
+  const keywords = new Set(topKeywords(joined, 20));
+  let order = 0;
+  const pool = request.sources.flatMap((source) =>
+    splitSentences(source.text)
+      .filter((sentence) => wordCount(sentence) >= 5)
+      .map((sentence) => ({ text: sentence, source, order: order++ })),
+  );
+  if (!pool.length) return [];
+
+  return pool
+    .map((item) => ({
+      ...item,
+      score: tokenize(item.text).filter((token) => keywords.has(token)).length,
+    }))
+    .sort((a, b) => b.score - a.score || a.order - b.order)
+    .slice(0, limit)
+    .sort((a, b) => a.order - b.order)
+    .map(({ text, source, order: itemOrder }) => ({ text, source, order: itemOrder }));
+}
+
+/**
+ * Grow an extractive summary until it meets 90% of the word budget, then keep
+ * the selected sentences in their original order. Pure and bounded.
+ */
+export function extractiveToBudget(text: string, targetWords: number): string {
+  const sentences = splitSentences(text);
+  if (!sentences.length) return '';
+  const goal = Math.max(1, Math.round(targetWords)) * 0.9;
+
+  let selected: string[] = [];
+  for (let count = 1; count <= sentences.length; count += 1) {
+    selected = extractiveSummary(text, { maxSentences: count });
+    if (wordCount(selected.join(' ')) >= goal) break;
+  }
+  return selected.join('\n\n');
 }
 
 export const extractiveProvider: AiProvider = {
@@ -81,6 +134,67 @@ export const extractiveProvider: AiProvider = {
     const joined = request.sources.map((s) => s.text).join('\n\n');
     if (!joined.trim()) {
       return { text: ABSTAIN_TEXT, citations: [], provider: this.id, degraded: true };
+    }
+
+    if (request.task === 'notes') {
+      const notes = noteItems(request, 8);
+      for (const note of notes) push(note.text, note.source);
+      return {
+        text: notes.map((note) => `[${note.source.chunkId}] ${note.text}`).join('\n'),
+        citations,
+        provider: this.id,
+        degraded: true,
+      };
+    }
+
+    if (request.task === 'outline') {
+      const notes = noteItems(request, 9);
+      if (!notes.length) {
+        return { text: '', citations: [], provider: this.id, degraded: true };
+      }
+
+      const headings: string[] = [];
+      for (const source of request.sources) {
+        const title = source.sectionTitle?.trim();
+        if (title && !headings.includes(title)) headings.push(title);
+        if (headings.length === 3) break;
+      }
+      for (let index = headings.length; index < 3; index += 1) {
+        headings.push(`Part ${index + 1}`);
+      }
+
+      const buckets: NoteItem[][] = [[], [], []];
+      for (const note of notes) {
+        const title = note.source.sectionTitle?.trim();
+        let index = title ? headings.indexOf(title) : -1;
+        if (index === -1 || buckets[index].length >= 3) {
+          index = buckets.findIndex((bucket) => bucket.length < 3);
+        }
+        if (index === -1) break;
+        buckets[index].push(note);
+        push(note.text, note.source);
+      }
+
+      const text = headings
+        .map((heading, index) => {
+          const points = buckets[index].map((note) => `- ${note.text}`);
+          return [`## ${heading}`, ...points].join('\n');
+        })
+        .join('\n\n');
+
+      return { text, citations, provider: this.id, degraded: true };
+    }
+
+    if (request.task === 'script') {
+      const targetWords = request.targetWords ?? 725;
+      const text = extractiveToBudget(joined, targetWords);
+      return {
+        text,
+        citations: [],
+        provider: this.id,
+        degraded: true,
+        truncated: wordCount(text) < targetWords * 0.9,
+      };
     }
 
     const sentences = extractiveSummary(joined, {

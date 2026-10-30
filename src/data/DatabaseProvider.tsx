@@ -2,8 +2,15 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { initDatabase, db } from './db';
 import { useTheme } from '@/design/theme';
+import {
+  recoverGenerationOnLaunch,
+  subscribeToForegroundRecovery,
+} from '@/features/jobs/launch';
 
 type Status = 'loading' | 'ready' | 'error';
+
+// Module scope: one listener per process, independent of provider remounts.
+subscribeToForegroundRecovery();
 
 const DatabaseContext = createContext<{ status: Status; retry: () => void }>({
   status: 'loading',
@@ -26,6 +33,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         await initDatabase();
+        void recoverGenerationOnLaunch({ now: Date.now() });
         if (!cancelled) setStatus('ready');
       } catch (error) {
         if (!cancelled) {

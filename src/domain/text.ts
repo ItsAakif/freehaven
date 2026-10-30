@@ -5,6 +5,9 @@ const ABBREVIATIONS = new Set([
   'ch', 'pp', 'ed', 'al', 'inc', 'ltd', 'co', 'dept', 'univ', 'approx', 'ca', 'cf',
 ]);
 
+/** CJK and fullwidth terminators. ASCII behaviour is unchanged. */
+const CJK_TERMINATORS = new Set(['。', '！', '？', '；', '…']);
+
 export function normalizeWhitespace(input: string): string {
   return input
     .replace(/\r\n?/g, '\n')
@@ -22,7 +25,16 @@ export function splitSentences(text: string): string[] {
   let start = 0;
   for (let i = 0; i < clean.length; i += 1) {
     const ch = clean[i];
-    if (ch !== '.' && ch !== '!' && ch !== '?') continue;
+    if (ch !== '.' && ch !== '!' && ch !== '?' && !CJK_TERMINATORS.has(ch)) continue;
+    if (CJK_TERMINATORS.has(ch)) {
+      // CJK prose does not use spaces after a terminator.
+      const sentence = clean.slice(start, i + 1).trim();
+      if (sentence) out.push(sentence);
+      start = i + 1;
+      while (clean[start] === ' ') start += 1;
+      i = start - 1;
+      continue;
+    }
     const next = clean[i + 1];
     if (next && next !== ' ' && next !== '"' && next !== "'" && next !== ')') continue;
     const before = clean.slice(Math.max(0, i - 12), i).toLowerCase();

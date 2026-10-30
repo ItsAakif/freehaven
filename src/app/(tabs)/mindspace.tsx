@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon, type IconName } from '@/design/icon';
 import {
   Screen,
   AppText,
@@ -38,7 +38,7 @@ const ACTIVITY_LABEL: Record<string, string> = {
   plan: 'Re-ordered a learning path',
 };
 
-const ACTIVITY_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
+const ACTIVITY_ICON: Record<string, IconName> = {
   read: 'book-outline',
   listen: 'headset-outline',
   review: 'albums-outline',
@@ -240,7 +240,7 @@ export default function MindspaceScreen() {
                 style={{ paddingVertical: space.md }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
-                  <Ionicons name="bookmark-outline" size={18} color={palette.gold} />
+                  <Icon name="bookmark-outline" size={18} color={palette.gold} />
                   <View style={{ flex: 1 }}>
                     <AppText variant="bodySm" numberOfLines={1} style={{ fontWeight: '600' }}>
                       {bookmark.label ?? 'Bookmark'}
@@ -255,7 +255,7 @@ export default function MindspaceScreen() {
                       </AppText>
                     ) : null}
                   </View>
-                  <Ionicons name="chevron-forward" size={16} color={palette.inkFaint} />
+                  <Icon name="chevron-forward" size={16} color={palette.inkFaint} />
                 </View>
               </Card>
             ))}
@@ -301,7 +301,7 @@ export default function MindspaceScreen() {
                 style={{ paddingVertical: space.md }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
-                  <Ionicons name="chatbubbles-outline" size={18} color={palette.accent} />
+                  <Icon name="chatbubbles-outline" size={18} color={palette.accent} />
                   <View style={{ flex: 1 }}>
                     <AppText variant="bodySm" numberOfLines={1} style={{ fontWeight: '600' }}>
                       {conversation.title}
@@ -336,7 +336,7 @@ export default function MindspaceScreen() {
                 style={{ paddingVertical: space.md }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
-                  <Ionicons name="reader-outline" size={18} color={palette.warm} />
+                  <Icon name="reader-outline" size={18} color={palette.warm} />
                   <View style={{ flex: 1 }}>
                     <AppText variant="bodySm" numberOfLines={1} style={{ fontWeight: '600' }}>
                       {summary.title}
@@ -345,7 +345,7 @@ export default function MindspaceScreen() {
                       {summary.bookTitle} · {summary.kind} · {formatRelative(summary.updatedAt)}
                     </AppText>
                   </View>
-                  <Ionicons name="chevron-forward" size={16} color={palette.inkFaint} />
+                  <Icon name="chevron-forward" size={16} color={palette.inkFaint} />
                 </View>
               </Card>
             ))}
@@ -374,7 +374,7 @@ export default function MindspaceScreen() {
                     justifyContent: 'center',
                   }}
                 >
-                  <Ionicons name={ACTIVITY_ICON[event.kind] ?? 'ellipse-outline'} size={15} color={palette.inkMuted} />
+                  <Icon name={ACTIVITY_ICON[event.kind] ?? 'ellipse'} size={15} color={palette.inkMuted} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <AppText variant="bodySm" numberOfLines={1}>
@@ -402,7 +402,7 @@ export default function MindspaceScreen() {
       <Divider style={{ marginTop: space.xl }} />
       <Pressable onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="Export or delete your data">
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.md }}>
-          <Ionicons name="download-outline" size={18} color={palette.inkMuted} />
+          <Icon name="download-outline" size={18} color={palette.inkMuted} />
           <AppText variant="bodySm" muted>
             Export or delete your data
           </AppText>

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/design/icon';
 import {
   Screen,
   AppText,
@@ -23,11 +23,7 @@ import { searchCatalogue } from '@/providers/catalogue';
 import type { CatalogueBook } from '@/providers/catalogue/types';
 import type { Book } from '@/domain/types';
 
-const PROVIDERS = [
-  { id: 'gutendex', label: 'Gutenberg', hint: 'Full text · public domain' },
-  { id: 'openlibrary', label: 'Open Library', hint: 'Discovery · borrow links' },
-  { id: 'googlebooks', label: 'Google Books', hint: 'Previews · purchase links' },
-] as const;
+const PROVIDERS = [{ id: 'gutendex', label: 'Project Gutenberg' }] as const;
 
 const SUGGESTIONS = ['stoicism', 'psychology', 'economics', 'science', 'philosophy', 'history'];
 
@@ -37,7 +33,6 @@ export default function BrowseScreen() {
   useDatabase();
   const [query, setQuery] = useState(params.subject ?? '');
   const [submitted, setSubmitted] = useState(params.subject ?? '');
-  const [provider, setProvider] = useState<(typeof PROVIDERS)[number]['id']>('gutendex');
   const [books, setBooks] = useState<CatalogueBook[]>([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -65,7 +60,7 @@ export default function BrowseScreen() {
       try {
         const result = await searchCatalogue(
           { q: submitted || undefined, subject: !submitted ? params.subject : undefined, page: nextPage, limit: 20 },
-          [provider],
+          [PROVIDERS[0].id],
         );
         if (id !== requestId.current) return;
         setBooks((prev) => (append ? [...prev, ...result.books] : result.books));
@@ -82,7 +77,7 @@ export default function BrowseScreen() {
         }
       }
     },
-    [provider, submitted, params.subject],
+    [submitted, params.subject],
   );
 
   useEffect(() => {
@@ -135,20 +130,6 @@ export default function BrowseScreen() {
         style={{ backgroundColor: palette.surface }}
       />
 
-      <View style={{ flexDirection: 'row', gap: space.sm, flexWrap: 'wrap' }}>
-        {PROVIDERS.map((p) => (
-          <Chip
-            key={p.id}
-            label={p.label}
-            active={provider === p.id}
-            onPress={() => {
-              setProvider(p.id);
-              setBooks([]);
-            }}
-          />
-        ))}
-      </View>
-
       {!submitted && !params.subject ? (
         <View style={{ gap: space.sm }}>
           <AppText variant="label" muted>
@@ -187,7 +168,7 @@ export default function BrowseScreen() {
                     {book.author ?? 'Unknown'} · saved
                   </AppText>
                 </View>
-                <Ionicons name="bookmark" size={16} color={palette.accent} />
+                <Icon name="bookmark" size={16} color={palette.accent} />
               </View>
             </Card>
           ))}
@@ -196,7 +177,7 @@ export default function BrowseScreen() {
 
       {error ? <ErrorState message={error} onRetry={() => void load(1, false)} /> : null}
 
-      {loading ? <LoadingBlock label={`Searching ${PROVIDERS.find((p) => p.id === provider)?.label}…`} /> : null}
+      {loading ? <LoadingBlock label={`Searching ${PROVIDERS[0].label}…`} /> : null}
 
       <View style={{ gap: space.md }}>
         {books.map((book) => (
@@ -212,16 +193,20 @@ export default function BrowseScreen() {
                   {book.publishedYear ? ` · ${book.publishedYear}` : ''}
                 </AppText>
                 <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
-                  {book.access === 'public_domain' ? (
+                  {book.epubUrl ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <Ionicons name="download-outline" size={12} color={palette.accent} />
+                      <Icon name="download-outline" size={12} color={palette.accent} />
                       <AppText variant="caption" color={palette.accent} style={{ fontWeight: '600' }}>
-                        Free full text
+                        Free EPUB · download
                       </AppText>
                     </View>
                   ) : (
                     <AppText variant="caption" faint>
-                      {book.access === 'preview' ? 'Preview available' : 'Metadata & access links'}
+                      {book.access === 'preview'
+                        ? 'Preview at the source'
+                        : book.access === 'external'
+                          ? 'Open the source link'
+                          : 'Catalogue record · open source link'}
                     </AppText>
                   )}
                   {book.pageCount ? <AppText variant="caption" faint>· {book.pageCount} pp</AppText> : null}
@@ -246,7 +231,7 @@ export default function BrowseScreen() {
         <EmptyState
           icon="search-outline"
           title="No results yet"
-          body={submitted ? `Nothing found for “${submitted}” in this catalogue. Try another provider or a broader term.` : 'Search for a title, an author, or a subject to begin.'}
+          body={submitted ? `Nothing found for “${submitted}” in this catalogue. Try a broader term or a different spelling.` : 'Search for a title, an author, or a subject to begin.'}
         />
       ) : null}
 

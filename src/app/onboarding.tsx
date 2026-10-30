@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/design/icon';
 import {
   Screen,
   AppText,
@@ -45,6 +45,7 @@ export default function OnboardingScreen() {
   const { palette } = useTheme();
   const setDailyGoal = usePreferences((s) => s.setDailyGoalMinutes);
   const [step, setStep] = useState(0);
+  const [name, setName] = useState('');
   const [goal, setGoal] = useState('');
   const [topics, setTopics] = useState<string[]>([]);
   const [familiarity, setFamiliarity] = useState<Record<string, Familiarity>>({});
@@ -70,6 +71,7 @@ export default function OnboardingScreen() {
     setError(null);
     try {
       await saveProfile({
+        displayName: name.trim() || null,
         goal: goal.trim() || null,
         topics,
         familiarity,
@@ -87,26 +89,51 @@ export default function OnboardingScreen() {
 
   const canContinue =
     step === 0
-      ? true
+      ? name.trim().length >= 2
       : step === 1
         ? true
         : step === 2
-          ? topics.length === 0 || topics.every((t) => familiarity[t])
-          : true;
+          ? topics.length > 0
+          : step === 3
+            ? topics.every((t) => familiarity[t])
+            : true;
 
   return (
     <Screen>
       <Header
         title="Set up Freehaven"
-        subtitle="Three questions, then you can start."
+        subtitle="A profile, a goal, and a pace. Everything stays on this device."
         onBack={step > 0 ? () => setStep(step - 1) : undefined}
       />
-      <ProgressBar value={(step + 1) / 4} />
+      <ProgressBar value={(step + 1) / 5} />
       <AppText variant="caption" faint>
-        Step {step + 1} of 4
+        Step {step + 1} of 5
       </AppText>
 
       {step === 0 ? (
+        <View style={{ gap: space.md }}>
+          <AppText variant="caption" faint style={{ textTransform: 'uppercase', letterSpacing: 1.4 }}>
+            Your profile
+          </AppText>
+          <AppText variant="title" serif>
+            Welcome. What should we call you?
+          </AppText>
+          <AppText variant="bodySm" muted>
+            No account, no email. This name is stored only on your phone and used to greet you.
+          </AppText>
+          <Field
+            value={name}
+            onChangeText={setName}
+            placeholder="Your name"
+            autoFocus
+            autoCapitalize="words"
+            returnKeyType="done"
+            accessibilityLabel="Your name"
+          />
+        </View>
+      ) : null}
+
+      {step === 1 ? (
         <View style={{ gap: space.md }}>
           <AppText variant="heading" serif>
             What do you want to understand?
@@ -129,7 +156,7 @@ export default function OnboardingScreen() {
         </View>
       ) : null}
 
-      {step === 1 ? (
+      {step === 2 ? (
         <View style={{ gap: space.md }}>
           <AppText variant="heading" serif>
             Which subjects?
@@ -145,7 +172,7 @@ export default function OnboardingScreen() {
         </View>
       ) : null}
 
-      {step === 2 ? (
+      {step === 3 ? (
         <View style={{ gap: space.md }}>
           <AppText variant="heading" serif>
             How familiar are you?
@@ -176,7 +203,7 @@ export default function OnboardingScreen() {
         </View>
       ) : null}
 
-      {step === 3 ? (
+      {step === 4 ? (
         <View style={{ gap: space.md }}>
           <AppText variant="heading" serif>
             How much time each day?
@@ -201,7 +228,7 @@ export default function OnboardingScreen() {
                   justifyContent: 'center',
                 }}
               >
-                <Ionicons name="leaf-outline" size={20} color={palette.accent} />
+                <Icon name="leaf-outline" size={20} color={palette.accent} />
               </View>
               <AppText variant="bodySm" style={{ flex: 1 }}>
                 {minutes} minutes a day is about {Math.max(4, Math.round(minutes * 0.9))} pages, or one short chapter.
@@ -218,26 +245,15 @@ export default function OnboardingScreen() {
       ) : null}
 
       <Button
-        label={step === 3 ? 'Start learning' : 'Continue'}
+        label={step === 4 ? 'Start learning' : 'Continue'}
         onPress={() => {
-          if (step === 3) void finish();
+          if (step === 4) void finish();
           else setStep(step + 1);
         }}
         disabled={!canContinue}
         loading={saving}
         full
       />
-      {step < 3 ? (
-        <Button
-          label="Skip for now"
-          variant="ghost"
-          onPress={() => {
-            if (step === 0) setStep(1);
-            else if (step === 1) setStep(2);
-            else setStep(3);
-          }}
-        />
-      ) : null}
     </Screen>
   );
 }

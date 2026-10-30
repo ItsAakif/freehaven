@@ -25,7 +25,16 @@ export function mapGutendexBook(book: GutendexBook): CatalogueBook | null {
   const formats = book.formats ?? {};
   const epub = formats['application/epub+zip'] ?? null;
   const cover = formats['image/jpeg'] ?? null;
-  const text = formats['text/plain; charset=utf-8'] ?? formats['text/plain'] ?? null;
+  const text =
+    formats['text/plain; charset=utf-8'] ??
+    formats['text/plain; charset=us-ascii'] ??
+    formats['text/plain'] ??
+    null;
+  const html =
+    formats['text/html; charset=utf-8'] ??
+    formats['text/html'] ??
+    formats['text/html; charset=us-ascii'] ??
+    null;
   return {
     id: `gutendex:${book.id}`,
     provider: 'gutendex',
@@ -43,7 +52,7 @@ export function mapGutendexBook(book: GutendexBook): CatalogueBook | null {
     source: 'gutenberg',
     sourceId: String(book.id),
     license: 'Public domain (Project Gutenberg)',
-    access: epub || text ? 'public_domain' : 'metadata',
+    access: epub || text || html ? 'public_domain' : 'metadata',
     externalUrl: `https://www.gutenberg.org/ebooks/${book.id}`,
     epubUrl: epub,
   };

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/design/icon';
 import {
   Screen,
   AppText,
@@ -117,7 +117,7 @@ export default function PlanScreen() {
                 justifyContent: 'center',
               }}
             >
-              {item.status === 'done' ? <Ionicons name="checkmark" size={16} color={palette.accentInk} /> : null}
+              {item.status === 'done' ? <Icon name="checkmark" size={16} color={palette.accentInk} /> : null}
               {item.status === 'doing' ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: palette.warm }} /> : null}
             </Pressable>
             <Cover uri={item.coverUrl} title={item.title} width={40} height={58} />
@@ -139,7 +139,7 @@ export default function PlanScreen() {
                 </AppText>
               ) : null}
             </Pressable>
-            <Ionicons name="chevron-forward" size={16} color={palette.inkFaint} />
+            <Icon name="chevron-forward" size={16} color={palette.inkFaint} />
           </View>
         </Card>
       ))}
@@ -175,7 +175,7 @@ export default function PlanScreen() {
               <AppText variant="bodySm" style={{ flex: 1 }} numberOfLines={2}>
                 {book.title}
               </AppText>
-              <Ionicons name="add" size={18} color={palette.accent} />
+              <Icon name="add" size={18} color={palette.accent} />
             </View>
           </Pressable>
         ))}

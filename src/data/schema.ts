@@ -7,7 +7,7 @@
  * filesystem and are referenced by path.
  */
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 6;
 
 export const MIGRATION_1 = `
 PRAGMA foreign_keys = ON;
@@ -265,6 +265,65 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `;
 
+export const MIGRATION_6 = `
+-- Migration 6: generation job progress, checkpoints, stale-lease recovery.
+-- Additive only. No table rebuild, no column drop, no data rewrite.
+
+ALTER TABLE jobs ADD COLUMN rendition_id TEXT REFERENCES renditions(id) ON DELETE CASCADE;
+ALTER TABLE jobs ADD COLUMN stage TEXT;
+ALTER TABLE jobs ADD COLUMN progress REAL NOT NULL DEFAULT 0;
+ALTER TABLE jobs ADD COLUMN units_done INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE jobs ADD COLUMN units_total INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE jobs ADD COLUMN eta_remaining_ms INTEGER;
+ALTER TABLE jobs ADD COLUMN eta_low_ms INTEGER;
+ALTER TABLE jobs ADD COLUMN eta_high_ms INTEGER;
+ALTER TABLE jobs ADD COLUMN started_at INTEGER;
+ALTER TABLE jobs ADD COLUMN heartbeat_at INTEGER;
+ALTER TABLE jobs ADD COLUMN finished_at INTEGER;
+ALTER TABLE jobs ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE jobs ADD COLUMN script_hash TEXT;
+ALTER TABLE jobs ADD COLUMN synth_hash TEXT;
+
+-- Exactly one queued/running generation job per rendition.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_active_rendition
+  ON jobs (rendition_id)
+  WHERE status IN ('queued', 'running') AND rendition_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_jobs_rendition
+  ON jobs (rendition_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_type_status
+  ON jobs (type, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_heartbeat
+  ON jobs (status, heartbeat_at);
+
+CREATE TABLE IF NOT EXISTS job_units (
+  id           TEXT PRIMARY KEY,
+  job_id       TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  stage        TEXT NOT NULL,                 -- 'map' | 'merge' | 'reduce' | 'expand' | 'synth'
+  ordinal      INTEGER NOT NULL,              -- position inside the stage plan
+  status       TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'running' | 'done' | 'failed'
+  input_key    TEXT NOT NULL,                 -- hash(stage_key + stage + ordinal + unit input)
+  payload_json TEXT,                          -- what the unit was asked to do (debug + replay)
+  result_json  TEXT,                          -- checkpoint value; NULL until done
+  attempts     INTEGER NOT NULL DEFAULT 0,
+  started_at   INTEGER,
+  finished_at  INTEGER,
+  duration_ms  INTEGER,
+  error        TEXT,
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL
+);
+
+-- The resume key. Also the double-write guard.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_job_units_ordinal
+  ON job_units (job_id, stage, ordinal);
+-- The resume scan: done units for a stage, in plan order.
+CREATE INDEX IF NOT EXISTS idx_job_units_resume
+  ON job_units (job_id, stage, status, ordinal);
+CREATE INDEX IF NOT EXISTS idx_job_units_status
+  ON job_units (status, updated_at);
+`;
+
 export type Migration = { version: number; sql: string };
 
 export const MIGRATION_2 = `
@@ -323,8 +382,93 @@ CREATE TABLE IF NOT EXISTS audio_queue (
 CREATE INDEX IF NOT EXISTS idx_audio_queue_book ON audio_queue (book_id, ordinal);
 `;
 
+export const MIGRATION_4 = `
+ALTER TABLE user_profile ADD COLUMN display_name TEXT;
+`;
+
+export const MIGRATION_5 = `
+-- One rendition per (work, language, style, length). Changing voice/engine rewrites the same row.
+CREATE TABLE IF NOT EXISTS renditions (
+  id              TEXT PRIMARY KEY,
+  book_id         TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+  language        TEXT NOT NULL,
+  style_id        TEXT NOT NULL,
+  length_preset   TEXT NOT NULL,              -- '5' | '15' | '25'
+  engine          TEXT NOT NULL DEFAULT 'device', -- 'device' | 'remote' | 'piper' | 'kokoro'
+  voice           TEXT,
+  model           TEXT,
+  instruction     TEXT,                       -- free-form user instruction, <= 280 chars
+  instruction_hash TEXT,                      -- 8 hex chars; invalidates segments on change
+  status          TEXT NOT NULL DEFAULT 'draft',
+                  -- 'draft' | 'scripting' | 'script_ready' | 'synthesising' | 'ready' | 'failed'
+  script_md       TEXT,
+  script_provider TEXT,
+  script_model    TEXT,
+  word_count      INTEGER NOT NULL DEFAULT 0,
+  duration_ms     INTEGER,
+  error           TEXT,
+  created_at      INTEGER NOT NULL,
+  updated_at      INTEGER NOT NULL,
+  UNIQUE (book_id, language, style_id, length_preset)
+);
+
+CREATE INDEX IF NOT EXISTS idx_renditions_book ON renditions (book_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_renditions_status ON renditions (status);
+
+CREATE TABLE IF NOT EXISTS rendition_segments (
+  id              TEXT PRIMARY KEY,
+  rendition_id    TEXT NOT NULL REFERENCES renditions(id) ON DELETE CASCADE,
+  ordinal         INTEGER NOT NULL,
+  section_id      TEXT,                       -- sections.id when known (no FK: sections are re-extracted)
+  section_ordinal INTEGER,
+  title           TEXT,                       -- section title, shown as a chapter marker
+  text            TEXT NOT NULL,              -- exact text sent to the engine; replay + re-synthesis source
+  speech_key      TEXT,                       -- cache key of the produced file (see narration.md)
+  file_path       TEXT,
+  format          TEXT,                       -- 'mp3' | 'wav'
+  duration_ms     INTEGER,
+  bytes           INTEGER,
+  start_ms        INTEGER NOT NULL DEFAULT 0, -- offset within the logical asset
+  status          TEXT NOT NULL DEFAULT 'queued', -- 'queued' | 'ready' | 'failed'
+  error           TEXT,
+  created_at      INTEGER NOT NULL,
+  updated_at      INTEGER NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rendition_segments_ordinal
+  ON rendition_segments (rendition_id, ordinal);
+CREATE INDEX IF NOT EXISTS idx_rendition_segments_status
+  ON rendition_segments (rendition_id, status);
+
+CREATE TABLE IF NOT EXISTS rendition_progress (
+  rendition_id TEXT PRIMARY KEY REFERENCES renditions(id) ON DELETE CASCADE,
+  position_ms  INTEGER NOT NULL DEFAULT 0,
+  percent      REAL NOT NULL DEFAULT 0,
+  completed    INTEGER NOT NULL DEFAULT 0,
+  updated_at   INTEGER NOT NULL
+);
+
+-- Locally installed TTS model bundles. One row per downloadable bundle, not per rendition.
+CREATE TABLE IF NOT EXISTS narration_engines (
+  id            TEXT PRIMARY KEY,             -- e.g. 'piper-en-lessac', 'kokoro-int8-multi'
+  engine        TEXT NOT NULL,                -- 'piper' | 'kokoro'
+  label         TEXT NOT NULL,
+  bundle_url    TEXT,
+  bundle_bytes  INTEGER,
+  model_dir     TEXT,
+  status        TEXT NOT NULL DEFAULT 'absent', -- 'absent'|'downloading'|'ready'|'failed'
+  progress      REAL NOT NULL DEFAULT 0,
+  verified_at   INTEGER,
+  error         TEXT,
+  updated_at    INTEGER NOT NULL
+);
+`;
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, sql: MIGRATION_1 },
   { version: 2, sql: MIGRATION_2 },
   { version: 3, sql: MIGRATION_3 },
+  { version: 4, sql: MIGRATION_4 },
+  { version: 5, sql: MIGRATION_5 },
+  { version: 6, sql: MIGRATION_6 },
 ];

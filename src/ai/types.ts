@@ -7,8 +7,17 @@
  */
 
 import type { Citation } from '@/domain/types';
+import type { ResponseStrategy } from './presets';
 
-export type AiTask = 'summary' | 'takeaways' | 'lesson' | 'answer' | 'explain';
+export type AiTask =
+  | 'summary'
+  | 'takeaways'
+  | 'lesson'
+  | 'answer'
+  | 'explain'
+  | 'notes'
+  | 'outline'
+  | 'script';
 
 export type GroundedSource = {
   chunkId: string;
@@ -23,6 +32,15 @@ export type AiRequest = {
   query?: string;
   sources: GroundedSource[];
   length?: 'short' | 'medium' | 'long';
+  /** Prose budget for notes/outline/script/summary. */
+  targetWords?: number;
+  /** Narration style directive, already composed. */
+  styleDirective?: string;
+  /** User free-form instruction, already sanitised. */
+  instruction?: string | null;
+  /** Per-call override (map/reduce/expand). */
+  timeoutMs?: number;
+  maxOutputTokens?: number;
 };
 
 export type AiResponse = {
@@ -32,6 +50,10 @@ export type AiResponse = {
   model?: string;
   /** True when the provider fell back to an extractive answer. */
   degraded?: boolean;
+  /** True when the model output was cut short. */
+  truncated?: boolean;
+  strategy?: ResponseStrategy;
+  usage?: { promptChars: number; completionChars: number };
 };
 
 export class AiUnavailableError extends Error {

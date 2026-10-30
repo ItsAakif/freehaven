@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/design/icon';
 import {
   Screen,
   AppText,
@@ -99,7 +99,7 @@ export default function CreateScreen() {
           style={{ flex: 1 }}
         >
           <Card style={{ backgroundColor: palette.accent, borderColor: palette.accent, minHeight: 150 }}>
-            <Ionicons name="cloud-upload-outline" size={26} color={palette.accentInk} />
+            <Icon name="cloud-upload-outline" size={26} color={palette.accentInk} />
             <AppText variant="heading" serif color={palette.accentInk} style={{ marginTop: space.md }}>
               Import
             </AppText>
@@ -115,7 +115,7 @@ export default function CreateScreen() {
           style={{ flex: 1 }}
         >
           <Card style={{ backgroundColor: palette.warmSoft, borderColor: palette.warmSoft, minHeight: 150 }}>
-            <Ionicons name="map-outline" size={26} color={palette.warm} />
+            <Icon name="map-outline" size={26} color={palette.warm} />
             <AppText variant="heading" serif style={{ marginTop: space.md }}>
               Learning path
             </AppText>
@@ -128,7 +128,7 @@ export default function CreateScreen() {
 
       <Card onPress={() => router.push('/browse')} style={{ paddingVertical: space.md }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
-          <Ionicons name="add-circle-outline" size={20} color={palette.accent} />
+          <Icon name="add-circle-outline" size={20} color={palette.accent} />
           <View style={{ flex: 1 }}>
             <AppText variant="bodySm" style={{ fontWeight: '600' }}>
               Add from the public catalogue
@@ -137,7 +137,7 @@ export default function CreateScreen() {
               Free classics you can download and read offline.
             </AppText>
           </View>
-          <Ionicons name="chevron-forward" size={16} color={palette.inkFaint} />
+          <Icon name="chevron-forward" size={16} color={palette.inkFaint} />
         </View>
       </Card>
 
@@ -147,7 +147,7 @@ export default function CreateScreen() {
           {state.data.jobs.map((job) => (
             <Card key={job.id} style={{ paddingVertical: space.md }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
-                <Ionicons
+                <Icon
                   name={job.status === 'failed' ? 'alert-circle-outline' : 'sync-outline'}
                   size={18}
                   color={job.status === 'failed' ? palette.danger : palette.accent}
@@ -205,7 +205,7 @@ export default function CreateScreen() {
                   hitSlop={8}
                   style={{ padding: 8 }}
                 >
-                  <Ionicons name="book-outline" size={18} color={palette.inkMuted} />
+                  <Icon name="book-outline" size={18} color={palette.inkMuted} />
                 </Pressable>
                 <Pressable
                   onPress={() => router.push({ pathname: '/listen/[id]', params: { id: book.id } })}
@@ -214,7 +214,7 @@ export default function CreateScreen() {
                   hitSlop={8}
                   style={{ padding: 8 }}
                 >
-                  <Ionicons name="headset-outline" size={18} color={palette.inkMuted} />
+                  <Icon name="headset-outline" size={18} color={palette.inkMuted} />
                 </Pressable>
                 <Pressable
                   onPress={() => router.push({ pathname: '/chat/[id]', params: { id: book.id } })}
@@ -223,7 +223,7 @@ export default function CreateScreen() {
                   hitSlop={8}
                   style={{ padding: 8 }}
                 >
-                  <Ionicons name="chatbubble-outline" size={18} color={palette.inkMuted} />
+                  <Icon name="chatbubble-outline" size={18} color={palette.inkMuted} />
                 </Pressable>
               </View>
             </View>
@@ -258,7 +258,7 @@ export default function CreateScreen() {
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
                 <View style={{ width: 34, height: 34, borderRadius: radius.sm, backgroundColor: palette.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="sparkles-outline" size={16} color={palette.accent} />
+                  <Icon name="sparkles-outline" size={16} color={palette.accent} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <AppText variant="bodySm" style={{ fontWeight: '600' }}>
@@ -268,7 +268,7 @@ export default function CreateScreen() {
                     {template.subject}
                   </AppText>
                 </View>
-                <Ionicons name="arrow-forward" size={16} color={palette.inkFaint} />
+                <Icon name="arrow-forward" size={16} color={palette.inkFaint} />
               </View>
             </Card>
           ))}

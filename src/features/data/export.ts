@@ -1,5 +1,8 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { db } from '@/data/db';
+import { CACHE_DIRS } from './paths';
+
+export { clearCaches } from './paths';
 
 const TABLES = [
   'books',
@@ -21,6 +24,9 @@ const TABLES = [
   'user_profile',
   'activity_events',
   'audio_queue',
+  'renditions',
+  'rendition_segments',
+  'rendition_progress',
 ] as const;
 
 /** Full personal-data export as JSON (no credentials, no model keys). */
@@ -45,7 +51,12 @@ export async function exportUserData(): Promise<{ uri: string; bytes: number }> 
   return { uri: file.uri, bytes: json.length };
 }
 
-export async function storageUsage(): Promise<{ libraryBytes: number; cacheBytes: number }> {
+export async function storageUsage(): Promise<{
+  libraryBytes: number;
+  cacheBytes: number;
+  narrationBytes: number;
+  modelBytes: number;
+}> {
   const size = (dir: Directory) => {
     if (!dir.exists) return 0;
     try {
@@ -54,16 +65,16 @@ export async function storageUsage(): Promise<{ libraryBytes: number; cacheBytes
       return 0;
     }
   };
+  const cacheBytes = CACHE_DIRS.reduce(
+    (total, name) => total + size(new Directory(Paths.cache, name)),
+    0,
+  );
   return {
     libraryBytes: size(new Directory(Paths.document, 'library')),
-    cacheBytes: size(new Directory(Paths.cache, 'downloads')),
+    cacheBytes,
+    narrationBytes: size(new Directory(Paths.document, 'renditions')),
+    modelBytes: size(new Directory(Paths.document, 'models')),
   };
-}
-
-/** Remove the download cache. Library files are untouched. */
-export function clearCaches(): void {
-  const downloads = new Directory(Paths.cache, 'downloads');
-  if (downloads.exists) downloads.delete();
 }
 
 export function formatBytes(bytes: number): string {  if (bytes < 1024) return `${bytes} B`;

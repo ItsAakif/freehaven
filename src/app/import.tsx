@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/design/icon';
 import {
   Screen,
   AppText,
@@ -82,7 +82,7 @@ export default function ImportScreen() {
       <Header title="Import" onBack={() => router.back()} subtitle="Your files stay on your device." />
 
       <Card style={{ backgroundColor: palette.accent, borderColor: palette.accent }}>
-        <Ionicons name="shield-checkmark-outline" size={22} color={palette.accentInk} />
+        <Icon name="shield-checkmark-outline" size={22} color={palette.accentInk} />
         <AppText variant="subheading" serif color={palette.accentInk} style={{ marginTop: space.sm }}>
           Local by default
         </AppText>

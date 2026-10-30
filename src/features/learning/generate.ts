@@ -11,6 +11,7 @@ import { addMessage, createConversation } from '@/data/repositories/mindspace';
 import { generateCards } from '@/domain/quiz';
 import { conceptsToMarkdown, extractConcepts } from '@/domain/concepts';
 import type { Chunk, SummaryKind } from '@/domain/types';
+import { lengthToWords, summariseBookDeep } from './summarise';
 
 export type SourceBundle = {
   sources: GroundedSource[];
@@ -28,6 +29,15 @@ export function sampleChunks(chunks: Chunk[], max = 12): Chunk[] {
 }
 
 export async function loadSources(bookId: string, max = 12): Promise<SourceBundle> {
+  return buildSourceBundle(bookId, max);
+}
+
+/** Every chunk in reading order — the deep summariser must see the whole book. */
+export async function loadAllSources(bookId: string): Promise<SourceBundle> {
+  return buildSourceBundle(bookId);
+}
+
+async function buildSourceBundle(bookId: string, max?: number): Promise<SourceBundle> {
   const all = await listChunksForBook(bookId);
   const document = await getDocument(bookId);
   const sectionTitles = new Map<string, string>();
@@ -36,7 +46,7 @@ export async function loadSources(bookId: string, max = 12): Promise<SourceBundl
       if (section.title) sectionTitles.set(section.id, section.title);
     }
   }
-  const chosen = sampleChunks(all, max);
+  const chosen = max === undefined ? all : sampleChunks(all, max);
   return {
     chunks: chosen,
     coverage: { totalChunks: all.length, usedChunks: chosen.length },
@@ -54,26 +64,15 @@ export async function summariseBook(
   kind: SummaryKind = 'summary',
   length: AiRequest['length'] = 'medium',
 ): Promise<{ summaryId: string; provider: string; degraded: boolean }> {
-  const bundle = await loadSources(bookId, kind === 'takeaways' ? 8 : 12);
+  const bundle = await loadAllSources(bookId);
   if (!bundle.sources.length) throw new Error('This book has no extracted text yet. Open it once to finish indexing.');
-  const provider = await resolveProvider();
-  const response = await provider.generate({
-    task: kind === 'lesson' ? 'lesson' : kind === 'takeaways' ? 'takeaways' : 'summary',
-    sources: bundle.sources,
-    length,
-  });
-  const title =
-    kind === 'lesson' ? 'Lesson' : kind === 'takeaways' ? 'Key takeaways' : kind === 'concepts' ? 'Concepts' : 'Summary';
-  const summary = await saveSummary({
+  const result = await summariseBookDeep({
     bookId,
     kind,
-    title,
-    bodyMd: response.text,
-    provider: response.provider,
-    model: response.model ?? null,
-    sourceChunkIds: response.citations.map((c) => c.chunkId),
+    targetWords: lengthToWords(length),
   });
-  return { summaryId: summary.id, provider: response.provider, degraded: !!response.degraded };
+  if (!result.summaryId) throw new Error('Summary could not be saved.');
+  return { summaryId: result.summaryId, provider: result.provider, degraded: result.degraded };
 }
 
 export async function generateCardsForBook(bookId: string, max = 12): Promise<number> {
@@ -134,23 +133,15 @@ export async function summariseChapter(
   if (!section) throw new Error('That chapter is no longer available.');
   const chunks = (await listChunksForBook(bookId)).filter((c) => c.sectionId === sectionId);
   if (!chunks.length) throw new Error('No indexed text was found for that chapter.');
-  const provider = await resolveProvider();
-  const response = await provider.generate({
-    task: 'summary',
-    sources: chunks.slice(0, 12).map((c) => ({ chunkId: c.id, text: c.text, page: c.page })),
-    length,
-  });
-  const summary = await saveSummary({
+  const result = await summariseBookDeep({
     bookId,
     kind: 'chapter',
-    title: section.title ?? `Chapter ${section.ordinal + 1}`,
-    bodyMd: response.text,
-    provider: response.provider,
-    model: response.model ?? null,
+    targetWords: lengthToWords(length),
     sectionId,
-    sourceChunkIds: response.citations.map((c) => c.chunkId),
+    title: section.title ?? `Chapter ${section.ordinal + 1}`,
   });
-  return { summaryId: summary.id, provider: response.provider, degraded: !!response.degraded };
+  if (!result.summaryId) throw new Error('Chapter summary could not be saved.');
+  return { summaryId: result.summaryId, provider: result.provider, degraded: result.degraded };
 }
 
 /** Definition-style concepts, extracted locally — no model involved. */

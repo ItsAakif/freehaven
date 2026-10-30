@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "es2022",
+    "lib": ["es2022"],
+    "outDir": "../.harness",
+    "rootDir": "..",
+    "types": ["node"],
+    "strict": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "ignoreDeprecations": "6.0"
+  },
+  "include": [
+    "../src/domain/text.ts",
+    "../src/lib/http.ts",
+    "../src/features/imports/charset.ts",
+    "../src/features/imports/sniff.ts",
+    "../src/features/imports/gutenberg.ts",
+    "../src/features/imports/gutenbergSources.ts",
+    "../src/features/imports/html.ts",
+    "../src/features/imports/epub.ts",
+    "../src/features/imports/quality.ts",
+    "../src/features/learning/windows.ts",
+    "../src/features/narration/segments.ts",
+    "./gutenberg-conformance.ts"
+  ]
+}

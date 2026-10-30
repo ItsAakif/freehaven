@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Icon } from '@/design/icon';
 import * as Speech from 'expo-speech';
 import {
   Screen,
@@ -19,7 +19,8 @@ import { useTheme } from '@/design/theme';
 import { getBook } from '@/data/repositories/books';
 import { getConversation, listMessages } from '@/data/repositories/mindspace';
 import { askBook, saveAnswerAsHighlight } from '@/features/learning/generate';
-import { currentProviderLabel } from '@/ai';
+import { getStoredKey } from '@/ai';
+import { getPreset } from '@/ai/presets';
 import { usePreferences } from '@/state/preferences';
 import type { Citation, Message } from '@/domain/types';
 
@@ -42,13 +43,38 @@ export default function ChatScreen() {
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [providerLabel, setProviderLabel] = useState('On-device extractive');
   const [citation, setCitation] = useState<Citation | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const aiProvider = usePreferences((s) => s.aiProvider);
+  const aiPreset = usePreferences((s) => s.aiPreset);
   const aiModel = usePreferences((s) => s.aiModel);
+  const aiBaseUrl = usePreferences((s) => s.aiBaseUrl);
+  const aiKeyPresent = usePreferences((s) => s.aiKeyPresent);
+  const [keyStored, setKeyStored] = useState(aiKeyPresent);
+  const preset = getPreset(aiPreset);
+
+  useEffect(() => {
+    let active = true;
+    void getStoredKey()
+      .then((key) => {
+        if (active) setKeyStored(!!key);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [aiKeyPresent, aiProvider, aiPreset]);
+
+  const remoteConfigured =
+    aiProvider === 'openai-compatible' &&
+    !!aiBaseUrl.trim() &&
+    !!aiModel.trim() &&
+    (!preset.requiresKey || keyStored);
+  const badgeLabel = remoteConfigured
+    ? `${preset.label} · ${aiModel.trim() || preset.defaultModel}`
+    : 'On-device';
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,7 +93,6 @@ export default function ChatScreen() {
         const book = await getBook(activeBookId);
         setBookTitle(book?.title ?? '');
       }
-      setProviderLabel(await currentProviderLabel());
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -132,12 +157,14 @@ export default function ChatScreen() {
 
         <View style={{ flexDirection: 'row', gap: space.sm, alignItems: 'center' }}>
           <Chip
-            label={aiProvider === 'openai-compatible' ? (aiKeyPresentLabel() ? `Remote · ${aiModel}` : 'Remote not configured') : 'On-device'}
-            icon={aiProvider === 'openai-compatible' ? 'cloud-outline' : 'phone-portrait-outline'}
+            label={badgeLabel}
+            icon={remoteConfigured ? 'cloud-outline' : 'phone-portrait-outline'}
             active
           />
           <AppText variant="caption" faint style={{ flex: 1 }} numberOfLines={1}>
-            {providerLabel}
+            {badgeLabel === 'On-device'
+              ? 'Answers are extracted from this book, with citations you can check.'
+              : 'Answers come from your chosen provider, grounded in this book.'}
           </AppText>
         </View>
 
@@ -292,7 +319,7 @@ export default function ChatScreen() {
               opacity: !question.trim() || busy ? 0.5 : 1,
             }}
           >
-            <Ionicons name="arrow-up" size={20} color={palette.accentInk} />
+            <Icon name="arrow-up" size={20} color={palette.accentInk} />
           </Pressable>
         </View>
       </Screen>
@@ -324,11 +351,7 @@ function IconButtonLike({ label, onPress }: { label: string; onPress: () => void
   const { palette } = useTheme();
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={10} style={{ padding: 8 }}>
-      <Ionicons name="create-outline" size={20} color={palette.ink} />
+      <Icon name="create-outline" size={20} color={palette.ink} />
     </Pressable>
   );
-}
-
-function aiKeyPresentLabel(): boolean {
-  return usePreferences.getState().aiKeyPresent;
 }
