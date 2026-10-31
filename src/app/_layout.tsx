@@ -62,6 +62,7 @@ function AppNavigator() {
         <Stack.Screen name="summary/[id]" />
         <Stack.Screen name="chat/[id]" />
         <Stack.Screen name="listen/[id]" />
+        <Stack.Screen name="guide/[id]" />
         <Stack.Screen name="generate/[renditionId]" />
         <Stack.Screen name="library" />
         <Stack.Screen name="review" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />

@@ -18,9 +18,8 @@
     "android": {
       "package": "app.freehaven.mobile",
       "adaptiveIcon": {
-        "backgroundColor": "#F6F1E7",
+        "backgroundColor": "#FEF9EF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false
@@ -36,7 +35,8 @@
         {
           "backgroundColor": "#F6F1E7",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 220
+          "imageWidth": 200,
+          "resizeMode": "contain"
         }
       ],
       [

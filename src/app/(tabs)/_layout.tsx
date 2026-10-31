@@ -11,9 +11,9 @@ import { radius, space } from '@/design/tokens';
 const TABS: { name: string; href: string; label: string; icon: IconName; activeIcon: IconName }[] = [
   { name: 'index', href: '/', label: 'Today', icon: 'sunny-outline', activeIcon: 'sunny' },
   { name: 'discover', href: '/discover', label: 'Discover', icon: 'compass-outline', activeIcon: 'compass' },
+  { name: 'create', href: '/create', label: 'Create', icon: 'add-circle-outline', activeIcon: 'add-circle' },
   { name: 'browse', href: '/browse', label: 'Browse', icon: 'search-outline', activeIcon: 'search' },
   { name: 'mindspace', href: '/mindspace', label: 'Mindspace', icon: 'sparkles-outline', activeIcon: 'sparkles' },
-  { name: 'create', href: '/create', label: 'Create', icon: 'add-circle-outline', activeIcon: 'add-circle' },
 ];
 
 export default function TabsLayout() {
@@ -74,9 +74,9 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" options={{ title: 'Today' }} />
       <Tabs.Screen name="discover" options={{ title: 'Discover' }} />
+      <Tabs.Screen name="create" options={{ title: 'Create' }} />
       <Tabs.Screen name="browse" options={{ title: 'Browse' }} />
       <Tabs.Screen name="mindspace" options={{ title: 'Mindspace' }} />
-      <Tabs.Screen name="create" options={{ title: 'Create' }} />
     </Tabs>
   );
 }

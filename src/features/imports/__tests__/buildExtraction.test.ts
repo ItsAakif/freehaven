@@ -1,4 +1,4 @@
-import { buildExtraction, detectFormat } from '@/features/imports/service';
+import { buildExtraction, detectFormat, filterBlankPdfPages } from '@/features/imports/service';
 
 describe('import extraction builder', () => {
   it('detects supported formats and rejects others', () => {
@@ -36,6 +36,23 @@ describe('import extraction builder', () => {
     expect(result.sections).toHaveLength(2);
     expect(result.sections[1].startPage).toBe(2);
     expect(result.chunks.every((c) => c.page === 1 || c.page === 2)).toBe(true);
+  });
+
+  it('skips blank PDF pages so sections start on the first real page', () => {
+    const pages = [
+      { page: 1, text: '   \n\t ' },
+      { page: 2, text: 'The first real page of the book.' },
+      { page: 3, text: '  ' },
+      { page: 4, text: 'The second real page of the book.' },
+    ];
+    const kept = filterBlankPdfPages(pages);
+    expect(kept.map((page) => page.page)).toEqual([2, 4]);
+
+    const result = buildExtraction('pdf', { kind: 'pdf', pages: kept });
+    expect(result.sections).toHaveLength(2);
+    expect(result.sections[0].startPage).toBe(2);
+    expect(result.sections[0].text).toContain('first real page');
+    expect(result.sections[1].startPage).toBe(4);
   });
 
   it('handles plain text input', () => {

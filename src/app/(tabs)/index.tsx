@@ -2,7 +2,6 @@ import React, { useCallback, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Redirect, router, useFocusEffect } from 'expo-router';
 import { Icon } from '@/design/icon';
-import { BrandMark } from '@/design/brand';
 import { Screen, AppText, Card, Button, Cover, ProgressBar, SectionHeader, IconButton, Reveal, EmptyState } from '@/design/ui';
 import { radius, space } from '@/design/tokens';
 import { useTheme } from '@/design/theme';
@@ -118,7 +117,6 @@ export default function TodayScreen() {
           </AppText>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <BrandMark size={24} style={{ marginRight: space.xs }} />
           <IconButton name="library-outline" label="Your library" onPress={() => router.push('/library')} />
           <IconButton name="search" label="Browse the catalogue" onPress={() => router.push('/browse')} />
           <IconButton name="settings-outline" label="Settings" onPress={() => router.push('/settings')} />

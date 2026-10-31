@@ -46,6 +46,7 @@ import {
   type ReaderHighlight,
   type ReaderSettings,
 } from '@/features/reader/readerHtml';
+import { listRenditions } from '@/data/repositories/renditions';
 import type { Highlight, Section } from '@/domain/types';
 
 // react-native-webview's generic props do not compose with React 19 typings here.
@@ -87,8 +88,13 @@ export default function ReaderScreen() {  const { id, locator: locatorParam } = 
   const state = useAsync(async () => {
     const book = await getBook(id);
     if (!book) return { book: null } as const;
-    const document = await getDocument(book.id);
-    if (!document) return { book, document: null, sections: [], position: null } as const;
+    const [document, renditions] = await Promise.all([
+      getDocument(book.id),
+      listRenditions(book.id),
+    ]);
+    if (!document) {
+      return { book, document: null, sections: [], position: null, renditions } as const;
+    }
     const [sections, position, highlightsForBook] = await Promise.all([
       listSections(document.id),
       getReadingPosition(book.id),
@@ -96,7 +102,7 @@ export default function ReaderScreen() {  const { id, locator: locatorParam } = 
     ]);
     const bookmarkFolders = await listBookmarkFolders();
     setFolders(bookmarkFolders.map((f) => ({ id: f.id, name: f.name })));
-    return { book, document, sections, position, highlightsForBook } as const;
+    return { book, document, sections, position, highlightsForBook, renditions } as const;
   }, [id]);
 
   useEffect(() => {
@@ -281,6 +287,7 @@ export default function ReaderScreen() {  const { id, locator: locatorParam } = 
   }
 
   const percent = Math.round(((index + scrollPct) / Math.max(1, sections.length)) * 100);
+  const guideRendition = state.data.renditions.find((rendition) => !!rendition.scriptMd) ?? null;
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.bg }}>
@@ -304,6 +311,15 @@ export default function ReaderScreen() {  const { id, locator: locatorParam } = 
             {section.title ?? `Section ${index + 1}`}
           </AppText>
         </View>
+        {guideRendition ? (
+          <IconButton
+            name="sparkles-outline"
+            label="Read the guide"
+            onPress={() =>
+              router.push({ pathname: '/guide/[id]', params: { id: guideRendition.id } })
+            }
+          />
+        ) : null}
         <IconButton name="search" label="Search in book" onPress={() => setSearchOpen(true)} />
         {state.data?.document?.format === 'pdf' && state.data.document.filePath ? (
           <IconButton

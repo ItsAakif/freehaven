@@ -1,5 +1,5 @@
 /** @jest-environment node */
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { File } from 'expo-file-system';
 import { resetDriverForTests, setDriverForTests } from '@/data/db';
 import { createTestDriver } from '@/data/__tests__/testDriver';
@@ -11,6 +11,7 @@ import {
   extractDocument,
   importBytes,
 } from '@/features/imports/service';
+import { setPdfTextModuleForTests } from '@/features/imports/pdfNative';
 import {
   htmlOnlyBook,
   latin1HtmlWithMeta,
@@ -37,6 +38,19 @@ async function blankPdf(): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.addPage();
   return doc.save();
+}
+
+async function pdfWithBlankCover(): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  doc.addPage([400, 400]);
+  const prose =
+    'Deliberate practice improves performance over time because it targets weaknesses with focused repetition and immediate feedback. ';
+  const second = doc.addPage([400, 400]);
+  second.drawText(prose.repeat(2), { x: 40, y: 340, size: 9, font, maxWidth: 320, lineHeight: 13 });
+  const third = doc.addPage([400, 400]);
+  third.drawText(prose.repeat(2), { x: 40, y: 340, size: 9, font, maxWidth: 320, lineHeight: 13 });
+  return doc.save({ useObjectStreams: false });
 }
 
 describe('detectFormat', () => {
@@ -90,6 +104,32 @@ describe('extractDocument dispatch', () => {
     const result = await extractDocument(await blankPdf(), { name: 'scan.pdf' });
     expect(result.quality).toBe('needs_ocr');
     expect(result.narration.allowed).toBe(false);
+  });
+
+  it('drops a blank PDF cover page before building sections', async () => {
+    const prose =
+      'Deliberate practice improves performance over time because it targets weaknesses with focused repetition and immediate feedback. ';
+    setPdfTextModuleForTests({
+      isPdfTextAvailable: () => true,
+      extractPdfPages: async () =>
+        JSON.stringify([
+          { page: 1, text: '   \n\t ' },
+          { page: 2, text: prose.repeat(2) },
+          { page: 3, text: prose.repeat(2) },
+        ]),
+    });
+    try {
+      const result = await extractDocument(await pdfWithBlankCover(), {
+        name: 'book.pdf',
+        sourceUri: 'file:///fake/book.pdf',
+      });
+      expect(result.pageCount).toBe(3);
+      expect(result.quality).not.toBe('needs_ocr');
+      expect(result.extraction.sections.map((section) => section.startPage)).toEqual([2, 3]);
+      expect(result.extraction.sections[0].text).toContain('Deliberate practice');
+    } finally {
+      setPdfTextModuleForTests(null);
+    }
   });
 
   it('reports an image payload as unsupported media', async () => {

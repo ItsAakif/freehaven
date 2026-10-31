@@ -158,6 +158,7 @@ export default function BookDetailScreen() {
   }
 
   const { book, document, position, summaries, cards, highlights, sections, mastery, renditions, probes } = state.data;
+  const guideRendition = renditions.find((rendition) => !!rendition.scriptMd) ?? null;
   const readMinutes = document ? Math.max(1, Math.round((document.wordCount ?? 0) / 220)) : null;
   const canDownload = book.access === 'public_domain' && (!!book.epubUrl || !!book.sourceId);
   const canRead = !!document || canDownload;
@@ -354,6 +355,17 @@ export default function BookDetailScreen() {
         </AppText>
       ) : null}
 
+      {guideRendition ? (
+        <Button
+          label="Read the guide"
+          icon="sparkles-outline"
+          full
+          onPress={() =>
+            router.push({ pathname: '/guide/[id]', params: { id: guideRendition.id } })
+          }
+        />
+      ) : null}
+
       {book.description ? (
         <View style={{ gap: 6 }}>
           <SectionHeader title="About" />
@@ -442,21 +454,33 @@ export default function BookDetailScreen() {
                       {rendition.wordCount ? ` · ${rendition.wordCount} words` : ''}
                     </AppText>
                   </View>
-                  <Button
-                    label={canListen ? 'Listen' : 'Create'}
-                    size="sm"
-                    variant="secondary"
-                    onPress={() => {
-                      if (canListen) {
-                        router.push({
-                          pathname: '/listen/[id]',
-                          params: { id: book.id, rendition: rendition.id },
-                        });
-                      } else {
-                        openCreateSheet(rendition);
-                      }
-                    }}
-                  />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
+                    {rendition.scriptMd ? (
+                      <Button
+                        label="Guide"
+                        size="sm"
+                        variant="ghost"
+                        onPress={() =>
+                          router.push({ pathname: '/guide/[id]', params: { id: rendition.id } })
+                        }
+                      />
+                    ) : null}
+                    <Button
+                      label={canListen ? 'Listen' : 'Create'}
+                      size="sm"
+                      variant="secondary"
+                      onPress={() => {
+                        if (canListen) {
+                          router.push({
+                            pathname: '/listen/[id]',
+                            params: { id: book.id, rendition: rendition.id },
+                          });
+                        } else {
+                          openCreateSheet(rendition);
+                        }
+                      }}
+                    />
+                  </View>
                 </View>
               </Card>
             );

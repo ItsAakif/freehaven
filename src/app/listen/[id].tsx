@@ -1,15 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Speech from 'expo-speech';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import { Icon } from '@/design/icon';
+import { BrandMark } from '@/design/brand';
 import {
   Screen,
   AppText,
   Card,
   Button,
   Chip,
+  Cover,
   Field,
   Header,
   IconButton,
@@ -19,7 +21,7 @@ import {
   LoadingBlock,
   Divider,
 } from '@/design/ui';
-import { space } from '@/design/tokens';
+import { radius, space } from '@/design/tokens';
 import { useTheme } from '@/design/theme';
 import { useAsync } from '@/hooks/useAsync';
 import { getBook } from '@/data/repositories/books';
@@ -40,6 +42,7 @@ import {
 import { NARRATION_STYLES, getNarrationStyle } from '@/features/narration/styles';
 import { LENGTH_PRESETS } from '@/features/narration/lengths';
 import { computeOffsets, estimatedDurationMs, locateInSegments, sectionMarkers } from '@/features/narration/manifest';
+import { tokenizeTranscript, wordIndexForProgress } from '@/features/narration/transcript';
 import { maxCharsForEngine, planSpeechSegments } from '@/features/narration/segments';
 import {
   probeNarrationEngines,
@@ -123,6 +126,7 @@ export default function ListenScreen() {
   const [playing, setPlaying] = useState(false);
   const [index, setIndex] = useState(0);
   const [positionMs, setPositionMs] = useState(0);
+  const [deviceElapsedMs, setDeviceElapsedMs] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -144,6 +148,7 @@ export default function ListenScreen() {
   const pendingSeekRef = useRef<number | null>(null);
   const playingRef = useRef(false);
   const currentTimeRef = useRef(0);
+  const deviceClock = useRef({ startedAt: 0, baseMs: 0 });
   const snapshotRef = useRef({ renditionId: null as string | null, positionMs: 0, index: 0 });
 
   const player = useAudioPlayer(null);
@@ -213,6 +218,16 @@ export default function ListenScreen() {
   const rendition = state.data?.rendition ?? null;
   const segments = useMemo(() => state.data?.segments ?? [], [state.data?.segments]);
   const mode: 'device' | 'file' = rendition?.engine === 'device' ? 'device' : 'file';
+
+  // Device narration has no native clock, so approximate elapsed time while speaking.
+  useEffect(() => {
+    if (mode !== 'device' || !playing) return;
+    const timer = setInterval(() => {
+      setDeviceElapsedMs(deviceClock.current.baseMs + (Date.now() - deviceClock.current.startedAt));
+    }, 200);
+    return () => clearInterval(timer);
+  }, [mode, playing]);
+
   const starts = useMemo(
     () => computeOffsets(segments.map((segment) => ({ durationMs: segment.durationMs, text: segment.text }))),
     [segments],
@@ -368,6 +383,8 @@ export default function ListenScreen() {
     const sequence = speechSeq.current + 1;
     speechSeq.current = sequence;
     stopping.current = false;
+    deviceClock.current = { startedAt: Date.now(), baseMs: 0 };
+    setDeviceElapsedMs(0);
     setIndex(targetIndex);
     setPlaying(true);
 
@@ -754,7 +771,44 @@ export default function ListenScreen() {
   const isDevice = mode === 'device';
   const readyCount = segments.filter((segment) => canPlay(segment)).length;
   const allReady = segments.length > 0 && readyCount === segments.length;
-  const absolutePosition = isDevice ? starts[index] ?? 0 : (starts[index] ?? 0) + currentTimeRef.current * 1000;
+  const segmentStartMs = starts[index] ?? 0;
+  const segmentDurationMs =
+    currentSegment?.durationMs && currentSegment.durationMs > 0
+      ? currentSegment.durationMs
+      : estimatedDurationMs(currentSegment?.text ?? '');
+  const absolutePosition = isDevice
+    ? segmentStartMs + deviceElapsedMs
+    : segmentStartMs + (status.currentTime ?? 0) * 1000;
+  const segmentElapsedMs = Math.max(
+    0,
+    Math.min(segmentDurationMs, absolutePosition - segmentStartMs),
+  );
+  const wordProgress = segmentDurationMs > 0 ? segmentElapsedMs / segmentDurationMs : 0;
+  const activeWordIndex = wordIndexForProgress(currentSegment?.text ?? '', wordProgress);
+  const transcriptTokens = tokenizeTranscript(currentSegment?.text ?? '');
+  let wordCursor = 0;
+  const transcriptSpans = transcriptTokens.map((token, tokenIndex) => {
+    if (!token.word) return <Text key={`t${tokenIndex}`}>{token.text}</Text>;
+    const wordIndex = wordCursor;
+    wordCursor += 1;
+    const active = wordIndex === activeWordIndex;
+    return (
+      <Text
+        key={`t${tokenIndex}`}
+        style={
+          active
+            ? {
+                color: palette.accent,
+                backgroundColor: palette.accentSoft,
+                fontWeight: '700',
+              }
+            : undefined
+        }
+      >
+        {token.text}
+      </Text>
+    );
+  });
   const overall = totalMs > 0 ? Math.min(1, absolutePosition / totalMs) : 0;
   const currentTitle = currentSegment?.title ?? book.title;
   const activeVoiceName =
@@ -766,32 +820,56 @@ export default function ListenScreen() {
     <Screen scroll={false}>
       <Header
         title="Listen"
-        subtitle={book.title}
         onBack={() => router.back()}
         right={<IconButton name="moon-outline" label="Sleep timer" onPress={() => setSleepOpen(true)} />}
       />
 
       <View style={{ flex: 1, justifyContent: 'center', gap: space.lg }}>
         <View style={{ alignItems: 'center', gap: space.md }}>
-          <View
-            style={{
-              width: 132,
-              height: 132,
-              borderRadius: 66,
-              backgroundColor: palette.accentSoft,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Icon name={playing ? 'volume-high' : 'headset'} size={48} color={palette.accent} />
-          </View>
+          {book.coverUrl ? (
+            <Cover
+              uri={book.coverUrl}
+              title={book.title}
+              width={132}
+              height={190}
+              style={{ borderRadius: radius.lg }}
+            />
+          ) : (
+            <View
+              style={{
+                width: 132,
+                height: 190,
+                borderRadius: radius.lg,
+                backgroundColor: palette.surface,
+                borderWidth: 1,
+                borderColor: palette.line,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <BrandMark size={72} />
+            </View>
+          )}
           <AppText variant="title" serif style={{ textAlign: 'center' }}>
-            {currentTitle}
+            {book.title}
           </AppText>
-          <AppText variant="caption" faint>
-            {ENGINE_LABEL[rendition.engine]} · {getNarrationStyle(rendition.styleId).label} · {rendition.length} min
+          <AppText variant="caption" faint style={{ textAlign: 'center' }}>
+            {currentTitle} · {ENGINE_LABEL[rendition.engine]} · {getNarrationStyle(rendition.styleId).label} ·{' '}
+            {rendition.length} min
             {segments.length ? ` · segment ${index + 1} of ${segments.length}` : ''}
           </AppText>
+        </View>
+
+        <View style={{ alignItems: 'center' }}>
+          <Button
+            label="Guide"
+            icon="sparkles-outline"
+            variant="secondary"
+            size="sm"
+            onPress={() =>
+              router.push({ pathname: '/guide/[id]', params: { id: rendition.id } })
+            }
+          />
         </View>
 
         {rendition.status === 'draft' ? (
@@ -907,9 +985,15 @@ export default function ListenScreen() {
           <>
             <Card style={{ backgroundColor: palette.surfaceAlt, borderColor: palette.line }}>
               <ScrollView style={{ maxHeight: 180 }} showsVerticalScrollIndicator={false}>
-                <AppText variant="bodySm" serif muted>
-                  {currentSegment?.text ?? 'This narration has no segments.'}
-                </AppText>
+                {transcriptTokens.length ? (
+                  <AppText variant="bodySm" serif muted>
+                    {transcriptSpans}
+                  </AppText>
+                ) : (
+                  <AppText variant="bodySm" serif muted>
+                    This narration has no segments.
+                  </AppText>
+                )}
               </ScrollView>
             </Card>
 

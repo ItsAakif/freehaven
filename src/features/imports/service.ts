@@ -254,6 +254,15 @@ type PdfExtraction = {
 };
 
 /**
+ * Drop pages with no extractable text before building sections. Scanned covers
+ * and blank leaves otherwise become empty sections the reader opens first.
+ * Page numbers and the real `pageCount` are preserved.
+ */
+export function filterBlankPdfPages<T extends { page: number; text: string }>(pages: T[]): T[] {
+  return pages.filter((page) => page.text.trim().length > 0);
+}
+
+/**
  * Sniff bytes, pick a parser and assess the text. Pure apart from `parseEpub`
  * and `parsePdf`, so the whole dispatch is unit-testable in Node.
  */
@@ -379,7 +388,11 @@ export async function extractDocument(
       }
     }
 
-    const text = normalizeWhitespace(parsed.pages.map((page) => page.text).join('\n\n'));
+    const text = normalizeWhitespace(
+      filterBlankPdfPages(parsed.pages)
+        .map((page) => page.text)
+        .join('\n\n'),
+    );
     const assessment = assessTextQuality({
       text,
       source: 'pdf',
@@ -412,7 +425,11 @@ export async function extractDocument(
       language: null,
       identifier: null,
       pageCount: parsed.pageCount,
-      extraction: buildExtraction('pdf', { kind: 'pdf', pages: parsed.pages }, documentId),
+      extraction: buildExtraction(
+        'pdf',
+        { kind: 'pdf', pages: filterBlankPdfPages(parsed.pages) },
+        documentId,
+      ),
       quality: assessment.verdict,
       qualityReasons: assessment.reasons,
       boilerplate: emptyBoilerplate(),
