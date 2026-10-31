@@ -70,6 +70,8 @@ function AppNavigator() {
         <Stack.Screen name="settings" />
         <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
         <Stack.Screen name="plan/[id]" />
+        <Stack.Screen name="new-guide/[bookId]" />
+        <Stack.Screen name="full-guide/[guideId]" />
       </Stack>
     </>
   );

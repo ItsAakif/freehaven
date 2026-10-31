@@ -27,6 +27,13 @@ import { useAsync } from '@/hooks/useAsync';
 import { getBook } from '@/data/repositories/books';
 import { getDocument, listSections } from '@/data/repositories/reading';
 import {
+  completeGuideChapter,
+  getGuide,
+  getGuideChapter,
+  listGuideChapterSegments,
+  listGuideChapters,
+} from '@/data/repositories/guides';
+import {
   getOrCreateRendition,
   getRenditionProgress,
   listRenditions,
@@ -51,6 +58,7 @@ import {
 } from '@/features/narration/engines';
 import { instructionHash, MAX_INSTRUCTION_CHARS } from '@/features/narration/script';
 import { NARRATION_LANGUAGES, voicesForLanguage, type DeviceVoice } from '@/features/audio';
+import type { Guide, GuideChapter } from '@/domain/guides';
 import type { Rendition, RenditionEngine, RenditionSegment } from '@/domain/narration';
 
 const RATES = [0.75, 1, 1.25, 1.5];
@@ -106,14 +114,24 @@ type Loaded = {
   segments: RenditionSegment[];
   progress: Awaited<ReturnType<typeof getRenditionProgress>>;
   probes: Awaited<ReturnType<typeof probeNarrationEngines>>;
+  guide: Guide | null;
+  guideChapter: GuideChapter | null;
+  guideTotal: number;
 } | null;
 
 export default function ListenScreen() {
-  const { id, rendition: renditionParam, t } = useLocalSearchParams<{
+  const {
+    id,
+    rendition: renditionParam,
+    t,
+    guideChapter: guideChapterParam,
+  } = useLocalSearchParams<{
     id: string;
     rendition?: string;
     t?: string;
+    guideChapter?: string;
   }>();
+  const guideMode = !!guideChapterParam;
   const { palette } = useTheme();
   const narrationRate = usePreferences((s) => s.narrationRate);
   const setNarrationRate = usePreferences((s) => s.setNarrationRate);
@@ -159,11 +177,87 @@ export default function ListenScreen() {
   const currentTimeRef = useRef(0);
   const deviceClock = useRef({ startedAt: 0, baseMs: 0 });
   const snapshotRef = useRef({ renditionId: null as string | null, positionMs: 0, index: 0 });
+  const guideCompletionRef = useRef<string | null>(null);
 
   const player = useAudioPlayer(null);
   const status = useAudioPlayerStatus(player);
 
   const state = useAsync<Loaded>(async () => {
+    if (guideChapterParam) {
+      const chapter = await getGuideChapter(guideChapterParam);
+      if (!chapter) return null;
+      const guide = await getGuide(chapter.guideId);
+      if (!guide) return null;
+      const [book, segmentRows, guideChapters, probes] = await Promise.all([
+        getBook(guide.bookId),
+        listGuideChapterSegments(chapter.id),
+        listGuideChapters(guide.id),
+        probeNarrationEngines(),
+      ]);
+      if (!book) return null;
+
+      const adapter: Rendition = {
+        id: `guide-chapter:${chapter.id}`,
+        bookId: guide.bookId,
+        language: guide.language,
+        styleId: guide.styleId,
+        length: '5',
+        engine: guide.engine,
+        voice: guide.voice,
+        model: guide.model,
+        instruction: null,
+        instructionHash: null,
+        status:
+          chapter.status === 'ready'
+            ? 'ready'
+            : chapter.summaryMd
+              ? 'script_ready'
+              : 'failed',
+        scriptMd: chapter.summaryMd,
+        scriptProvider: chapter.provider,
+        scriptModel: chapter.model,
+        wordCount: chapter.wordCount,
+        durationMs: chapter.durationMs,
+        error: chapter.error,
+        createdAt: chapter.createdAt,
+        updatedAt: chapter.updatedAt,
+      };
+
+      const mappedSegments: RenditionSegment[] = segmentRows.map((segment, index) => ({
+        id: segment.id,
+        renditionId: adapter.id,
+        ordinal: segment.ordinal,
+        sectionId: null,
+        sectionOrdinal: 0,
+        title: index === 0 ? chapter.title : null,
+        text: segment.text,
+        speechKey: segment.speechKey,
+        filePath: segment.filePath,
+        format: segment.format,
+        durationMs: segment.durationMs,
+        bytes: segment.bytes,
+        startMs: segment.startMs,
+        timingsJson: segment.timingsJson,
+        status: segment.status,
+        error: segment.error,
+        createdAt: segment.createdAt,
+        updatedAt: segment.updatedAt,
+      }));
+
+      return {
+        book,
+        document: null,
+        rendition: adapter,
+        renditions: [],
+        segments: mappedSegments,
+        progress: null,
+        probes,
+        guide,
+        guideChapter: chapter,
+        guideTotal: guideChapters.length,
+      };
+    }
+
     const book = await getBook(id);
     if (!book) return null;
     const [document, renditions] = await Promise.all([getDocument(book.id), listRenditions(book.id)]);
@@ -177,8 +271,19 @@ export default function ListenScreen() {
       chosen ? getRenditionProgress(chosen.id) : Promise.resolve(null),
       probeNarrationEngines(),
     ]);
-    return { book, document, rendition: chosen, renditions, segments, progress, probes };
-  }, [id, tick, selectedRenditionId]);
+    return {
+      book,
+      document,
+      rendition: chosen,
+      renditions,
+      segments,
+      progress,
+      probes,
+      guide: null,
+      guideChapter: null,
+      guideTotal: 0,
+    };
+  }, [id, tick, selectedRenditionId, guideChapterParam]);
 
   useEffect(() => {
     void Speech.getAvailableVoicesAsync()
@@ -256,9 +361,10 @@ export default function ListenScreen() {
     if (!rendition?.id || !segments.length) return;
     if (didInit.current === rendition.id) return;
     didInit.current = rendition.id;
-    const routePosition = t !== undefined ? Number(t) : undefined;
-    const target =
-      routePosition !== undefined && Number.isFinite(routePosition)
+    const routePosition = !guideMode && t !== undefined ? Number(t) : undefined;
+    const target = guideMode
+      ? 0
+      : routePosition !== undefined && Number.isFinite(routePosition)
         ? routePosition
         : state.data?.progress?.positionMs ?? 0;
     const loc = locateInSegments(
@@ -268,15 +374,30 @@ export default function ListenScreen() {
     setIndex(Math.max(0, loc.index));
     setPositionMs(Math.max(0, target));
     pendingSeekRef.current = loc.offsetMs;
-  }, [rendition?.id, segments, starts, state.data?.progress?.positionMs, t]);
+  }, [rendition?.id, segments, starts, state.data?.progress?.positionMs, t, guideMode]);
 
   useEffect(() => {
     if (index < segments.length) return;
     setIndex(0);
   }, [index, segments.length]);
 
+  useEffect(() => {
+    guideCompletionRef.current = null;
+  }, [guideChapterParam]);
+
+  const markGuideComplete = useCallback(() => {
+    if (!guideChapterParam) return;
+    if (guideCompletionRef.current === guideChapterParam) return;
+    guideCompletionRef.current = guideChapterParam;
+    void completeGuideChapter(guideChapterParam);
+  }, [guideChapterParam]);
+
   const persist = useCallback(
     (targetIndex: number, targetPositionMs: number, completed = false) => {
+      if (guideMode) {
+        if (completed) markGuideComplete();
+        return;
+      }
       if (!rendition?.id) return;
       void saveRenditionProgress({
         renditionId: rendition.id,
@@ -285,7 +406,7 @@ export default function ListenScreen() {
         completed,
       });
     },
-    [rendition?.id, totalMs],
+    [rendition?.id, totalMs, guideMode, markGuideComplete],
   );
 
   useEffect(() => {
@@ -294,6 +415,7 @@ export default function ListenScreen() {
 
   useEffect(
     () => () => {
+      if (guideMode) return;
       const snapshot = snapshotRef.current;
       if (!snapshot.renditionId) return;
       void saveRenditionProgress({
@@ -303,7 +425,7 @@ export default function ListenScreen() {
         completed: false,
       });
     },
-    [totalMs],
+    [totalMs, guideMode],
   );
 
   function nextReady(from: number): number | null {
@@ -367,7 +489,7 @@ export default function ListenScreen() {
   }, [status.didJustFinish]);
 
   useEffect(() => {
-    if (!playing || mode !== 'file' || !rendition?.id) return;
+    if (!playing || mode !== 'file' || !rendition?.id || guideMode) return;
     const timer = setInterval(() => {
       const absolute = (starts[index] ?? 0) + currentTimeRef.current * 1000;
       setPositionMs(absolute);
@@ -379,7 +501,7 @@ export default function ListenScreen() {
       });
     }, 10_000);
     return () => clearInterval(timer);
-  }, [playing, mode, rendition?.id, starts, index, totalMs]);
+  }, [playing, mode, rendition?.id, starts, index, totalMs, guideMode]);
 
   /* ---------------------------------------------------------- device playback */
 
@@ -608,14 +730,22 @@ export default function ListenScreen() {
     return (
       <Screen>
         <Header title="Listen" onBack={() => router.back()} />
-        <EmptyState icon="alert-circle-outline" title="Book not found" body="It may have been removed from your library." />
+        <EmptyState
+          icon="alert-circle-outline"
+          title={guideMode ? 'This chapter is gone' : 'Book not found'}
+          body={
+            guideMode
+              ? 'The full guide may have been rebuilt or deleted.'
+              : 'It may have been removed from your library.'
+          }
+        />
       </Screen>
     );
   }
 
-  const { book, document, probes } = state.data;
+  const { book, probes, guide, guideChapter, guideTotal } = state.data;
 
-  if (!document) {
+  if (!state.data.document && !guideMode) {
     return (
       <Screen>
         <Header title="Listen" subtitle={book.title} onBack={() => router.back()} />
@@ -879,22 +1009,40 @@ export default function ListenScreen() {
             {book.title}
           </AppText>
           <AppText variant="caption" faint style={{ textAlign: 'center' }}>
-            {currentTitle} · {ENGINE_LABEL[rendition.engine]} · {getNarrationStyle(rendition.styleId).label} ·{' '}
-            {rendition.length} min
-            {segments.length ? ` · segment ${index + 1} of ${segments.length}` : ''}
+            {guideMode && guide && guideChapter ? (
+              `Chapter ${guideChapter.ordinal + 1} of ${guideTotal || guideChapter.ordinal + 1} · ${guide.title}`
+            ) : (
+              <>
+                {currentTitle} · {ENGINE_LABEL[rendition.engine]} ·{' '}
+                {getNarrationStyle(rendition.styleId).label} · {rendition.length} min
+                {segments.length ? ` · segment ${index + 1} of ${segments.length}` : ''}
+              </>
+            )}
           </AppText>
         </View>
 
         <View style={{ alignItems: 'center' }}>
-          <Button
-            label="Guide"
-            icon="sparkles-outline"
-            variant="secondary"
-            size="sm"
-            onPress={() =>
-              router.push({ pathname: '/guide/[id]', params: { id: rendition.id } })
-            }
-          />
+          {guideMode && guide ? (
+            <Button
+              label="Full guide"
+              icon="list-outline"
+              variant="secondary"
+              size="sm"
+              onPress={() =>
+                router.push({ pathname: '/full-guide/[guideId]', params: { guideId: guide.id } })
+              }
+            />
+          ) : (
+            <Button
+              label="Guide"
+              icon="sparkles-outline"
+              variant="secondary"
+              size="sm"
+              onPress={() =>
+                router.push({ pathname: '/guide/[id]', params: { id: rendition.id } })
+              }
+            />
+          )}
         </View>
 
         {rendition.status === 'draft' ? (
@@ -926,35 +1074,62 @@ export default function ListenScreen() {
         ) : null}
 
         {rendition.status === 'script_ready' ? (
-          <Card>
-            <AppText variant="bodySm" style={{ fontWeight: '600' }}>
-              Ready to generate audio
-            </AppText>
-            <AppText variant="caption" faint style={{ marginTop: 4 }}>
-              {rendition.wordCount.toLocaleString()} words · {ENGINE_LABEL[rendition.engine]}
-              {rendition.model ? ` · ${rendition.model}` : ''}
-            </AppText>
-            <AppText variant="caption" faint style={{ marginTop: 4 }}>
-              {segments.length
-                ? `${segments.length} segment${segments.length === 1 ? '' : 's'} planned. Nothing is synthesised until you press generate.`
-                : 'No segments were planned. The script may be empty; write it again.'}
-            </AppText>
-            {engineAvailability && !engineAvailability.available ? (
-              <AppText variant="caption" color={palette.danger} style={{ marginTop: space.sm }}>
-                {REASON_COPY[engineAvailability.reason]}
+          guideMode ? (
+            <Card>
+              <AppText variant="bodySm" style={{ fontWeight: '600' }}>
+                Summary ready · audio not generated
               </AppText>
-            ) : null}
-            <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md, flexWrap: 'wrap' }}>
-              <Button
-                label="Generate audio"
-                icon="cloud-download-outline"
-                size="sm"
-                disabled={!engineAvailability?.available || !segments.length}
-                onPress={() => openGeneration(rendition)}
-              />
-              <Button label="Change engine" variant="secondary" size="sm" onPress={() => setEngineSheet(true)} />
-            </View>
-          </Card>
+              <AppText variant="caption" faint style={{ marginTop: 4 }}>
+                {rendition.wordCount.toLocaleString()} words · {ENGINE_LABEL[rendition.engine]}.
+                Generate this chapter’s audio from the full guide screen.
+              </AppText>
+              {guide ? (
+                <View style={{ marginTop: space.md }}>
+                  <Button
+                    label="Generate audio"
+                    icon="cloud-download-outline"
+                    size="sm"
+                    onPress={() =>
+                      router.push({
+                        pathname: '/full-guide/[guideId]',
+                        params: { guideId: guide.id },
+                      })
+                    }
+                  />
+                </View>
+              ) : null}
+            </Card>
+          ) : (
+            <Card>
+              <AppText variant="bodySm" style={{ fontWeight: '600' }}>
+                Ready to generate audio
+              </AppText>
+              <AppText variant="caption" faint style={{ marginTop: 4 }}>
+                {rendition.wordCount.toLocaleString()} words · {ENGINE_LABEL[rendition.engine]}
+                {rendition.model ? ` · ${rendition.model}` : ''}
+              </AppText>
+              <AppText variant="caption" faint style={{ marginTop: 4 }}>
+                {segments.length
+                  ? `${segments.length} segment${segments.length === 1 ? '' : 's'} planned. Nothing is synthesised until you press generate.`
+                  : 'No segments were planned. The script may be empty; write it again.'}
+              </AppText>
+              {engineAvailability && !engineAvailability.available ? (
+                <AppText variant="caption" color={palette.danger} style={{ marginTop: space.sm }}>
+                  {REASON_COPY[engineAvailability.reason]}
+                </AppText>
+              ) : null}
+              <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md, flexWrap: 'wrap' }}>
+                <Button
+                  label="Generate audio"
+                  icon="cloud-download-outline"
+                  size="sm"
+                  disabled={!engineAvailability?.available || !segments.length}
+                  onPress={() => openGeneration(rendition)}
+                />
+                <Button label="Change engine" variant="secondary" size="sm" onPress={() => setEngineSheet(true)} />
+              </View>
+            </Card>
+          )
         ) : null}
 
         {rendition.status === 'synthesising' ? (
@@ -987,22 +1162,40 @@ export default function ListenScreen() {
                 {REASON_COPY[engineAvailability.reason]}
               </AppText>
             ) : null}
-            <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md, flexWrap: 'wrap' }}>
-              <Button
-                label={rendition.scriptMd ? 'Retry' : 'Write script'}
-                icon={rendition.scriptMd ? 'refresh-outline' : 'create-outline'}
-                size="sm"
-                disabled={!engineAvailability?.available && !rendition.scriptMd}
-                onPress={() => openGeneration(rendition)}
-              />
-              <Button label="Change engine" variant="secondary" size="sm" onPress={() => setEngineSheet(true)} />
-              <Button
-                label="Re-make"
-                variant="ghost"
-                size="sm"
-                onPress={() => router.push({ pathname: '/book/[id]', params: { id: book.id } })}
-              />
-            </View>
+            {guideMode ? (
+              guide ? (
+                <View style={{ marginTop: space.md }}>
+                  <Button
+                    label="Open full guide"
+                    icon="reader-outline"
+                    size="sm"
+                    onPress={() =>
+                      router.push({
+                        pathname: '/full-guide/[guideId]',
+                        params: { guideId: guide.id },
+                      })
+                    }
+                  />
+                </View>
+              ) : null
+            ) : (
+              <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md, flexWrap: 'wrap' }}>
+                <Button
+                  label={rendition.scriptMd ? 'Retry' : 'Write script'}
+                  icon={rendition.scriptMd ? 'refresh-outline' : 'create-outline'}
+                  size="sm"
+                  disabled={!engineAvailability?.available && !rendition.scriptMd}
+                  onPress={() => openGeneration(rendition)}
+                />
+                <Button label="Change engine" variant="secondary" size="sm" onPress={() => setEngineSheet(true)} />
+                <Button
+                  label="Re-make"
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => router.push({ pathname: '/book/[id]', params: { id: book.id } })}
+                />
+              </View>
+            )}
           </Card>
         ) : null}
 
@@ -1066,11 +1259,20 @@ export default function ListenScreen() {
                 </AppText>
                 <View style={{ marginTop: space.md }}>
                   <Button
-                    label="Generate remaining audio"
+                    label={guideMode ? 'Open full guide' : 'Generate remaining audio'}
                     icon="cloud-download-outline"
                     size="sm"
-                    disabled={!engineAvailability?.available}
-                    onPress={() => openGeneration(rendition)}
+                    disabled={!guideMode && !engineAvailability?.available}
+                    onPress={() => {
+                      if (guideMode && guide) {
+                        router.push({
+                          pathname: '/full-guide/[guideId]',
+                          params: { guideId: guide.id },
+                        });
+                      } else {
+                        openGeneration(rendition);
+                      }
+                    }}
                   />
                 </View>
               </Card>
@@ -1106,7 +1308,7 @@ export default function ListenScreen() {
               {markers.length > 1 ? (
                 <Button label="Chapters" icon="list-outline" variant="secondary" size="sm" onPress={() => setChaptersOpen(true)} />
               ) : null}
-              {isDevice ? (
+              {isDevice && !guideMode ? (
                 <Button
                   label={`Voice · ${activeVoiceName}`}
                   icon="mic-outline"
@@ -1115,13 +1317,15 @@ export default function ListenScreen() {
                   onPress={() => setVoiceOpen(true)}
                 />
               ) : null}
-              <Button
-                label="Re-make"
-                icon="shuffle-outline"
-                variant="ghost"
-                size="sm"
-                onPress={() => router.push({ pathname: '/book/[id]', params: { id: book.id } })}
-              />
+              {!guideMode ? (
+                <Button
+                  label="Re-make"
+                  icon="shuffle-outline"
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => router.push({ pathname: '/book/[id]', params: { id: book.id } })}
+                />
+              ) : null}
             </View>
 
             {notice ? (

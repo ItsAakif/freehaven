@@ -182,6 +182,7 @@ export interface PlanItem {
   ordinal: number;
   status: 'todo' | 'doing' | 'done';
   reason?: string | null;
+  guideChapterId?: string | null;
 }
 
 export interface Job {

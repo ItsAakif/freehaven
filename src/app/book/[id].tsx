@@ -26,11 +26,14 @@ import { useAsync } from '@/hooks/useAsync';
 import { getBook, setInLibrary } from '@/data/repositories/books';
 import { getDocument, getReadingPosition, listHighlights, listSections } from '@/data/repositories/reading';
 import { listCards, listSummaries } from '@/data/repositories/learning';
+import { guideStats, listGuides } from '@/data/repositories/guides';
 import {
   getOrCreateRendition,
   listRenditions,
   setRenditionEngine,
 } from '@/data/repositories/renditions';
+import { estimateChapterCount, estimateGuideBuild, estimateGuideCopy } from '@/features/guides/estimate';
+import { GUIDE_WORDS_PER_CHAPTER } from '@/features/guides/constants';
 import { downloadGutenbergBook } from '@/features/imports/service';
 import { conceptSummary, generateCardsForBook, summariseBook, summariseChapter } from '@/features/learning/generate';
 import { encodeLocator } from '@/features/reader/readerHtml';
@@ -123,20 +126,23 @@ export default function BookDetailScreen() {
   const state = useAsync(async () => {
     const book = await getBook(id);
     if (!book) return { book: null } as const;
-    const [document, position, summaries, cards, highlights, renditions] = await Promise.all([
+    const [document, position, summaries, cards, highlights, renditions, guides] = await Promise.all([
       getDocument(book.id),
       getReadingPosition(book.id),
       listSummaries(book.id),
       listCards(book.id),
       listHighlights(book.id),
       listRenditions(book.id),
+      listGuides(book.id),
     ]);
     const [sections, mastery, probes] = await Promise.all([
       document ? listSections(document.id) : Promise.resolve([]),
       bookMastery(book.id),
       probeNarrationEngines(),
     ]);
-    return { book, document, position, summaries, cards, highlights, sections, mastery, renditions, probes } as const;
+    const fullGuide = guides.find((guide) => guide.status !== 'draft') ?? null;
+    const fullGuideStats = fullGuide ? await guideStats(fullGuide.id) : null;
+    return { book, document, position, summaries, cards, highlights, sections, mastery, renditions, probes, fullGuide, fullGuideStats } as const;
   }, [id, tick]);
 
   if (state.loading) {
@@ -157,7 +163,7 @@ export default function BookDetailScreen() {
     );
   }
 
-  const { book, document, position, summaries, cards, highlights, sections, mastery, renditions, probes } = state.data;
+  const { book, document, position, summaries, cards, highlights, sections, mastery, renditions, probes, fullGuide, fullGuideStats } = state.data;
   const contentSections = sections
     .map((section, index) => ({ section, index }))
     .filter(({ section }) => (section.text ?? '').trim().length > 0);
@@ -167,6 +173,20 @@ export default function BookDetailScreen() {
   const canRead = !!document || canDownload;
   const qualityCopy = document?.error ? QUALITY_COPY[document.error] : null;
   const narrationMaxLength = narrationMaxLengthFor(document?.wordCount, document?.error);
+  const guideEstimate = document
+    ? estimateGuideCopy(
+        estimateGuideBuild({
+          chapters: estimateChapterCount({
+            format: document.format,
+            pageCount: document.pageCount ?? book.pageCount ?? null,
+            sectionCount: sections.length,
+          }),
+          wordsPerChapter: GUIDE_WORDS_PER_CHAPTER,
+          engine: 'device',
+        }),
+        'device',
+      )
+    : null;
 
   const run = async (label: string, fn: () => Promise<unknown>) => {
     setBusy(label);
@@ -368,6 +388,64 @@ export default function BookDetailScreen() {
           }
         />
       ) : null}
+
+      <View style={{ gap: space.sm }}>
+        <SectionHeader title="Full guide" />
+        {fullGuide ? (
+          <Card style={{ backgroundColor: palette.surfaceAlt, borderColor: palette.line }}>
+            <AppText variant="bodySm" serif style={{ fontWeight: '600' }} numberOfLines={2}>
+              {fullGuide.title}
+            </AppText>
+            <AppText variant="caption" faint style={{ marginTop: 4 }}>
+              {fullGuideStats?.ready ?? 0}/{fullGuideStats?.chapters ?? 0} chapters ready ·{' '}
+              {fullGuideStats?.completed ?? 0}/{fullGuideStats?.chapters ?? 0} listened
+            </AppText>
+            <View style={{ marginTop: space.md }}>
+              <Button
+                label="Open full guide"
+                icon="sparkles-outline"
+                full
+                onPress={() =>
+                  router.push({
+                    pathname: '/full-guide/[guideId]',
+                    params: { guideId: fullGuide.id },
+                  })
+                }
+              />
+            </View>
+          </Card>
+        ) : (
+          <Card>
+            <AppText variant="bodySm" muted>
+              A chapter-by-chapter summary of the whole book, one chapter a day.
+            </AppText>
+            {guideEstimate ? (
+              <AppText variant="caption" faint style={{ marginTop: 6 }}>
+                About {guideEstimate.short}
+              </AppText>
+            ) : null}
+            <View style={{ marginTop: space.md }}>
+              <Button
+                label="Create full guide"
+                icon="sparkles-outline"
+                full
+                disabled={!document}
+                onPress={() =>
+                  router.push({
+                    pathname: '/new-guide/[bookId]',
+                    params: { bookId: book.id },
+                  })
+                }
+              />
+            </View>
+            {!document ? (
+              <AppText variant="caption" faint style={{ marginTop: 6 }}>
+                Import or download a readable copy first.
+              </AppText>
+            ) : null}
+          </Card>
+        )}
+      </View>
 
       {book.description ? (
         <View style={{ gap: 6 }}>

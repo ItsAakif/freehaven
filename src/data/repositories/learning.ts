@@ -2,6 +2,7 @@ import { db } from '@/data/db';
 import { newId, startOfDay } from '@/lib/id';
 import { schedule } from '@/domain/fsrs';
 import { logActivity } from './activity';
+import type { GuideChapterStatus } from '@/domain/guides';
 import type { Card, CardKind, Grade, Plan, PlanItem, Review, Summary, SummaryKind } from '@/domain/types';
 
 /* -------------------------------------------------------------- summaries */
@@ -387,6 +388,17 @@ export async function reviewStats(now = Date.now()): Promise<{
 
 /* ------------------------------------------------------------------ plans */
 
+export type PlanItemWithBook = PlanItem & {
+  title: string;
+  coverUrl: string | null;
+  guideChapterId: string | null;
+  guideChapterTitle: string | null;
+  guideChapterStatus: GuideChapterStatus | null;
+  guideId: string | null;
+  guideTitle: string | null;
+  guideDurationMs: number | null;
+};
+
 export async function createPlan(title: string, goal?: string): Promise<Plan> {
   const plan: Plan = { id: newId('plan'), title: title.trim(), goal: goal?.trim() || null, createdAt: Date.now() };
   await db().run('INSERT INTO plans (id, title, goal, created_at) VALUES (?,?,?,?)', [
@@ -439,7 +451,7 @@ export async function addPlanItem(planId: string, bookId: string, ordinal: numbe
   return item;
 }
 
-export async function listPlanItems(planId: string): Promise<(PlanItem & { title: string; coverUrl: string | null })[]> {
+export async function listPlanItems(planId: string): Promise<PlanItemWithBook[]> {
   const rows = await db().all<{
     id: string;
     plan_id: string;
@@ -447,10 +459,25 @@ export async function listPlanItems(planId: string): Promise<(PlanItem & { title
     ordinal: number;
     status: string;
     reason: string | null;
+    guide_chapter_id: string | null;
     title: string | null;
     cover_url: string | null;
+    guide_chapter_title: string | null;
+    guide_chapter_status: string | null;
+    guide_duration_ms: number | null;
+    guide_id: string | null;
+    guide_title: string | null;
   }>(
-    `SELECT i.*, b.title, b.cover_url FROM plan_items i LEFT JOIN books b ON b.id = i.book_id
+    `SELECT i.*, b.title, b.cover_url,
+            gc.title AS guide_chapter_title,
+            gc.status AS guide_chapter_status,
+            gc.duration_ms AS guide_duration_ms,
+            gc.guide_id AS guide_id,
+            g.title AS guide_title
+     FROM plan_items i
+     LEFT JOIN books b ON b.id = i.book_id
+     LEFT JOIN guide_chapters gc ON gc.id = i.guide_chapter_id
+     LEFT JOIN guides g ON g.id = gc.guide_id
      WHERE i.plan_id = ? ORDER BY i.ordinal`,
     [planId],
   );
@@ -461,8 +488,14 @@ export async function listPlanItems(planId: string): Promise<(PlanItem & { title
     ordinal: r.ordinal,
     status: r.status as PlanItem['status'],
     reason: r.reason,
+    guideChapterId: r.guide_chapter_id ?? null,
     title: r.title ?? 'Untitled',
     coverUrl: r.cover_url,
+    guideChapterTitle: r.guide_chapter_title ?? null,
+    guideChapterStatus: (r.guide_chapter_status as GuideChapterStatus | null) ?? null,
+    guideId: r.guide_id ?? null,
+    guideTitle: r.guide_title ?? null,
+    guideDurationMs: r.guide_duration_ms ?? null,
   }));
 }
 
@@ -523,6 +556,7 @@ export async function deleteAllUserData(): Promise<void> {
   await db().transaction(async () => {
     await db().run('DELETE FROM audio_queue');
     await db().run('DELETE FROM books');
+    await db().run('DELETE FROM guides');
     await db().run('DELETE FROM documents');
     await db().run('DELETE FROM chunks');
     await db().run('DELETE FROM sections');
@@ -545,7 +579,7 @@ export async function deleteAllUserData(): Promise<void> {
 
 /** Row counts for the storage summary in Settings. */
 export async function dataCounts(): Promise<Record<string, number>> {
-  const tables = ['books', 'documents', 'chunks', 'highlights', 'cards', 'reviews', 'summaries', 'conversations', 'renditions'];
+  const tables = ['books', 'documents', 'chunks', 'highlights', 'cards', 'reviews', 'summaries', 'conversations', 'renditions', 'guides'];
   const out: Record<string, number> = {};
   for (const table of tables) {
     const row = await db().first<{ count: number }>(`SELECT COUNT(*) as count FROM ${table}`);

@@ -7,7 +7,7 @@
  * filesystem and are referenced by path.
  */
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export const MIGRATION_1 = `
 PRAGMA foreign_keys = ON;
@@ -331,6 +331,103 @@ export const MIGRATION_7 = `
 ALTER TABLE rendition_segments ADD COLUMN timings_json TEXT;
 `;
 
+export const MIGRATION_8 = `
+-- Migration 8: Full Guide. Additive only.
+-- One guide per (book, language, style). Rebuilding reuses the row and replaces chapters.
+
+CREATE TABLE IF NOT EXISTS guides (
+  id                 TEXT PRIMARY KEY,
+  book_id            TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+  plan_id            TEXT REFERENCES plans(id) ON DELETE SET NULL,
+  title              TEXT NOT NULL,
+  style_id           TEXT NOT NULL,
+  language           TEXT NOT NULL,
+  engine             TEXT NOT NULL DEFAULT 'device',
+                     -- 'device' | 'remote' | 'piper' | 'kokoro'
+  voice              TEXT,
+  model              TEXT,
+  words_per_chapter  INTEGER NOT NULL DEFAULT 250,
+  chapters_per_day   INTEGER NOT NULL DEFAULT 1,
+  status             TEXT NOT NULL DEFAULT 'draft',
+                     -- 'draft' | 'ready' | 'generating' | 'partial' | 'generated' | 'failed'
+  error              TEXT,
+  created_at         INTEGER NOT NULL,
+  updated_at         INTEGER NOT NULL,
+  UNIQUE (book_id, language, style_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_guides_book
+  ON guides (book_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_guides_status
+  ON guides (status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_guides_plan
+  ON guides (plan_id)
+  WHERE plan_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS guide_chapters (
+  id               TEXT PRIMARY KEY,
+  guide_id         TEXT NOT NULL REFERENCES guides(id) ON DELETE CASCADE,
+  ordinal          INTEGER NOT NULL,
+  title            TEXT NOT NULL,
+  start_page       INTEGER,              -- 1-based inclusive; NULL for EPUB/text
+  end_page         INTEGER,              -- 1-based inclusive; NULL for EPUB/text
+  section_ids_json TEXT NOT NULL,         -- JSON array of sections.id, book order
+  summary_md       TEXT,
+  word_count       INTEGER NOT NULL DEFAULT 0,
+  provider         TEXT,
+  model            TEXT,
+  status           TEXT NOT NULL DEFAULT 'pending',
+                     -- 'pending' | 'summarising' | 'scripted' | 'synthesising' | 'ready' | 'failed'
+  error            TEXT,
+  audio_path       TEXT,                  -- only when the chapter has exactly one segment
+  duration_ms      INTEGER,               -- aggregate across segments
+  timings_json     TEXT,                  -- only when the chapter has exactly one segment
+  completed_at     INTEGER,               -- listening completion; NULL until done
+  created_at       INTEGER NOT NULL,
+  updated_at       INTEGER NOT NULL,
+  UNIQUE (guide_id, ordinal)
+);
+
+CREATE INDEX IF NOT EXISTS idx_guide_chapters_guide
+  ON guide_chapters (guide_id, ordinal);
+CREATE INDEX IF NOT EXISTS idx_guide_chapters_status
+  ON guide_chapters (guide_id, status);
+CREATE INDEX IF NOT EXISTS idx_guide_chapters_completed
+  ON guide_chapters (guide_id, completed_at);
+
+CREATE TABLE IF NOT EXISTS guide_chapter_segments (
+  id               TEXT PRIMARY KEY,
+  guide_chapter_id TEXT NOT NULL REFERENCES guide_chapters(id) ON DELETE CASCADE,
+  ordinal          INTEGER NOT NULL,
+  text             TEXT NOT NULL,          -- exact text sent to the engine
+  speech_key       TEXT,
+  file_path        TEXT,
+  format           TEXT,                   -- 'mp3' | 'wav'
+  duration_ms      INTEGER,
+  bytes            INTEGER,
+  start_ms         INTEGER NOT NULL DEFAULT 0,
+  timings_json     TEXT,
+  status           TEXT NOT NULL DEFAULT 'queued',
+                     -- 'queued' | 'ready' | 'failed'
+  error            TEXT,
+  created_at       INTEGER NOT NULL,
+  updated_at       INTEGER NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_guide_chapter_segments_ordinal
+  ON guide_chapter_segments (guide_chapter_id, ordinal);
+CREATE INDEX IF NOT EXISTS idx_guide_chapter_segments_status
+  ON guide_chapter_segments (guide_chapter_id, status);
+
+-- Daily path: a guide chapter can be one plan item. Existing book-level items keep NULL.
+ALTER TABLE plan_items
+  ADD COLUMN guide_chapter_id TEXT REFERENCES guide_chapters(id) ON DELETE CASCADE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_items_guide_chapter
+  ON plan_items (guide_chapter_id)
+  WHERE guide_chapter_id IS NOT NULL;
+`;
+
 export type Migration = { version: number; sql: string };
 
 export const MIGRATION_2 = `
@@ -479,4 +576,5 @@ export const MIGRATIONS: Migration[] = [
   { version: 5, sql: MIGRATION_5 },
   { version: 6, sql: MIGRATION_6 },
   { version: 7, sql: MIGRATION_7 },
+  { version: 8, sql: MIGRATION_8 },
 ];

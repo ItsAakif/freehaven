@@ -3,16 +3,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { migrate } from '@/data/db';
-import { MIGRATION_1, MIGRATION_5, MIGRATION_6, MIGRATION_7, MIGRATIONS } from '@/data/schema';
+import { MIGRATION_1, MIGRATION_5, MIGRATION_6, MIGRATION_7, MIGRATION_8, MIGRATIONS } from '@/data/schema';
 import { createTestDriver } from '@/data/__tests__/testDriver';
 
 describe('schema and migrations', () => {
   it('creates the full schema and records the version', async () => {
     const driver = createTestDriver();
     const version = await migrate(driver);
-    expect(version).toBe(7);
+    expect(version).toBe(8);
     const pragma = await driver.first<{ user_version: number }>('PRAGMA user_version');
-    expect(pragma?.user_version).toBe(7);
+    expect(pragma?.user_version).toBe(8);
 
     const tables = await driver.all<{ name: string }>(
       "SELECT name FROM sqlite_master WHERE type IN ('table','view') ORDER BY name",
@@ -40,6 +40,9 @@ describe('schema and migrations', () => {
       'rendition_segments',
       'rendition_progress',
       'narration_engines',
+      'guides',
+      'guide_chapters',
+      'guide_chapter_segments',
     ]) {
       expect(names).toContain(expected);
     }
@@ -133,7 +136,7 @@ describe('schema and migrations', () => {
        VALUES ('q','b','s1',0,'ready','/tmp/a.mp3',0,0)`,
     );
 
-    expect(await migrate(driver)).toBe(7);
+    expect(await migrate(driver)).toBe(8);
     const rows = await driver.all<{ id: string; file_path: string }>('SELECT * FROM audio_queue');
     expect(rows).toHaveLength(1);
     expect(rows[0].file_path).toBe('/tmp/a.mp3');
@@ -227,7 +230,7 @@ describe('schema and migrations', () => {
     const driver = createTestDriver();
     await migrate(driver);
     expect(await driver.first<{ user_version: number }>('PRAGMA user_version')).toMatchObject({
-      user_version: 7,
+      user_version: 8,
     });
     const tables = await driver.all<{ name: string }>(
       "SELECT name FROM sqlite_master WHERE type = 'table'",
@@ -270,7 +273,7 @@ describe('schema and migrations', () => {
        VALUES ('legacy','import','{}','queued',0,1,2)`,
     );
 
-    expect(await migrate(driver)).toBe(7);
+    expect(await migrate(driver)).toBe(8);
     const row = await driver.first<{
       id: string;
       type: string;
@@ -351,9 +354,9 @@ describe('schema and migrations', () => {
     expect(sql).not.toMatch(/ALTER\s+TABLE\s+\w+\s+RENAME/);
   });
 
-  it('creates a fresh v7 database with timings_json on rendition_segments', async () => {
+  it('creates a fresh v8 database with timings_json on rendition_segments', async () => {
     const driver = createTestDriver();
-    expect(await migrate(driver)).toBe(7);
+    expect(await migrate(driver)).toBe(8);
     const columns = (
       await driver.all<{ name: string }>('PRAGMA table_info(rendition_segments)')
     ).map((column) => column.name);
@@ -361,7 +364,7 @@ describe('schema and migrations', () => {
     await driver.close();
   });
 
-  it('upgrades a v6 segment to v7 in place and preserves old data', async () => {
+  it('upgrades a v6 segment to v8 in place and preserves old data', async () => {
     const driver = createTestDriver();
     await driver.exec(MIGRATION_1);
     for (const migration of MIGRATIONS.filter(
@@ -383,7 +386,7 @@ describe('schema and migrations', () => {
        VALUES ('s','r',0,'hello','/audio/0.wav',1234,0,0)`,
     );
 
-    expect(await migrate(driver)).toBe(7);
+    expect(await migrate(driver)).toBe(8);
     const row = await driver.first<{
       text: string;
       file_path: string;
@@ -403,5 +406,79 @@ describe('schema and migrations', () => {
     const sql = MIGRATION_7.replace(/--[^\n]*/g, '').toUpperCase();
     expect(sql).not.toMatch(/\bDROP\b/);
     expect(sql).not.toMatch(/ALTER\s+TABLE\s+\w+\s+RENAME/);
+  });
+
+  it('keeps migration 8 additive and creates the guide schema', async () => {
+    const sql = MIGRATION_8.replace(/--[^\n]*/g, '').toUpperCase();
+    expect(sql).not.toMatch(/\bDROP\b/);
+    expect(sql).not.toMatch(/ALTER\s+TABLE\s+\w+\s+RENAME/);
+    expect(sql).not.toMatch(/\bREBUILD\b/);
+
+    const driver = createTestDriver();
+    expect(await migrate(driver)).toBe(8);
+    const tables = (await driver.all<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table'",
+    )).map((table) => table.name);
+    for (const expected of ['guides', 'guide_chapters', 'guide_chapter_segments']) {
+      expect(tables).toContain(expected);
+    }
+
+    const planColumns = (await driver.all<{ name: string }>('PRAGMA table_info(plan_items)')).map(
+      (column) => column.name,
+    );
+    expect(planColumns).toContain('guide_chapter_id');
+
+    const indexes = (await driver.all<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'index'",
+    )).map((index) => index.name);
+    for (const expected of [
+      'idx_guides_book',
+      'idx_guides_status',
+      'idx_guides_plan',
+      'idx_guide_chapters_guide',
+      'idx_guide_chapters_status',
+      'idx_guide_chapters_completed',
+      'idx_guide_chapter_segments_ordinal',
+      'idx_guide_chapter_segments_status',
+      'idx_plan_items_guide_chapter',
+    ]) {
+      expect(indexes).toContain(expected);
+    }
+    await driver.close();
+  });
+
+  it('upgrades a v7 database with book, plan, plan item and rendition rows to v8', async () => {
+    const driver = createTestDriver();
+    await driver.exec(MIGRATION_1);
+    for (const migration of MIGRATIONS.filter(
+      (candidate) => candidate.version > 1 && candidate.version <= 7,
+    )) {
+      await driver.exec(migration.sql);
+    }
+    await driver.exec('PRAGMA user_version = 7');
+    await driver.run(
+      "INSERT INTO books (id, title, source, access, created_at, updated_at) VALUES ('b','Book','import','user_import',0,0)",
+    );
+    await driver.run(
+      "INSERT INTO plans (id, title, goal, created_at) VALUES ('p','Plan','goal',0)",
+    );
+    await driver.run(
+      "INSERT INTO plan_items (id, plan_id, book_id, ordinal, status) VALUES ('i','p','b',0,'todo')",
+    );
+    await driver.run(
+      `INSERT INTO renditions (id, book_id, language, style_id, length_preset, created_at, updated_at)
+       VALUES ('r','b','en','fireside','15',0,0)`,
+    );
+
+    expect(await migrate(driver)).toBe(8);
+    expect(await driver.all<{ id: string }>('SELECT id FROM books')).toHaveLength(1);
+    expect(await driver.all<{ id: string }>('SELECT id FROM plans')).toHaveLength(1);
+    const item = await driver.first<{ id: string; guide_chapter_id: string | null }>(
+      'SELECT id, guide_chapter_id FROM plan_items WHERE id = ?',
+      ['i'],
+    );
+    expect(item).toMatchObject({ id: 'i', guide_chapter_id: null });
+    expect(await driver.all<{ id: string }>('SELECT id FROM renditions')).toHaveLength(1);
+    await driver.close();
   });
 });

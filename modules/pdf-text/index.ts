@@ -13,6 +13,8 @@ import { requireOptionalNativeModule } from 'expo-modules-core';
 type PdfTextNativeModule = {
   /** Extracts every page as a JSON array string: `[{ "page": 1, "text": "" }]`. */
   extractPages(path: string): Promise<string>;
+  /** Extracts the document outline as JSON: `[{ "title": "1. Intro", "page": 14 }]`, 1-based. */
+  extractOutline(path: string): Promise<string>;
 };
 
 let nativeModule: PdfTextNativeModule | null = null;
@@ -34,6 +36,15 @@ export async function extractPdfPages(path: string): Promise<string | null> {
   } catch {
     // The file may have moved, be encrypted or be corrupt; the JS caller falls
     // back to the content-stream parser in that case.
+    return null;
+  }
+}
+
+export async function extractOutline(path: string): Promise<string | null> {
+  if (!nativeModule) return null;
+  try {
+    return await nativeModule.extractOutline(path);
+  } catch {
     return null;
   }
 }

@@ -1,7 +1,7 @@
 import { db } from '@/data/db';
 import { newId, startOfDay } from '@/lib/id';
 
-export type ActivityKind = 'read' | 'listen' | 'review' | 'highlight' | 'lesson' | 'chat' | 'import' | 'bookmark' | 'plan';
+export type ActivityKind = 'read' | 'listen' | 'review' | 'highlight' | 'lesson' | 'chat' | 'import' | 'bookmark' | 'plan' | 'guide';
 
 export type ActivityEvent = {
   id: string;

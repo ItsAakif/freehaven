@@ -2,6 +2,7 @@
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { extractDocument } from '@/features/imports/service';
 import {
+  extractPdfOutlineNative,
   extractPdfPagesNative,
   pdfUriToFilePath,
   setPdfTextModuleForTests,
@@ -74,6 +75,87 @@ describe('native PDF wrapper', () => {
     expect(pdfUriToFilePath('file:///a%20b.pdf')).toBe('/a b.pdf');
     expect(pdfUriToFilePath('/already/a/path.pdf')).toBe('/already/a/path.pdf');
     expect(pdfUriToFilePath('file:///bad%eth.pdf')).toBe('/bad%eth.pdf');
+  });
+});
+
+describe('native PDF outline wrapper', () => {
+  it('parses the outline JSON and decodes the path', async () => {
+    const extractOutline = jest.fn(async () =>
+      JSON.stringify([
+        { title: "1. No One's Crazy", page: 14 },
+        { title: '2. Luck & Risk', page: 28 },
+      ]),
+    );
+    setPdfTextModuleForTests({
+      isPdfTextAvailable: () => true,
+      extractPdfPages: async () => '[]',
+      extractOutline,
+    });
+
+    await expect(
+      extractPdfOutlineNative('file:///storage/emulated/0/Download/The%20Psychology%20of%20Money.pdf'),
+    ).resolves.toEqual([
+      { title: "1. No One's Crazy", page: 14 },
+      { title: '2. Luck & Risk', page: 28 },
+    ]);
+    expect(extractOutline).toHaveBeenCalledWith(
+      '/storage/emulated/0/Download/The Psychology of Money.pdf',
+    );
+  });
+
+  it('drops malformed entries and returns null for empty output', async () => {
+    setPdfTextModuleForTests({
+      isPdfTextAvailable: () => true,
+      extractPdfPages: async () => '[]',
+      extractOutline: async () =>
+        JSON.stringify([
+          { title: 'Kept', page: 3 },
+          { title: '', page: 4 },
+          { title: 'No page' },
+          { title: 'Not finite', page: 'x' },
+        ]),
+    });
+    await expect(extractPdfOutlineNative('file:///a.pdf')).resolves.toEqual([
+      { title: 'Kept', page: 3 },
+    ]);
+
+    setPdfTextModuleForTests({
+      isPdfTextAvailable: () => true,
+      extractPdfPages: async () => '[]',
+      extractOutline: async () => JSON.stringify([]),
+    });
+    await expect(extractPdfOutlineNative('file:///a.pdf')).resolves.toBeNull();
+  });
+
+  it('returns null for a missing method, unavailable module, malformed JSON and errors', async () => {
+    setPdfTextModuleForTests({
+      isPdfTextAvailable: () => true,
+      extractPdfPages: async () => '[]',
+    });
+    await expect(extractPdfOutlineNative('file:///a.pdf')).resolves.toBeNull();
+
+    setPdfTextModuleForTests({
+      isPdfTextAvailable: () => false,
+      extractPdfPages: async () => '[]',
+      extractOutline: async () => JSON.stringify([{ title: 'Nope', page: 1 }]),
+    });
+    await expect(extractPdfOutlineNative('file:///a.pdf')).resolves.toBeNull();
+
+    setPdfTextModuleForTests({
+      isPdfTextAvailable: () => true,
+      extractPdfPages: async () => '[]',
+      extractOutline: async () => 'not json',
+    });
+    await expect(extractPdfOutlineNative('file:///a.pdf')).resolves.toBeNull();
+
+    setPdfTextModuleForTests({
+      isPdfTextAvailable: () => true,
+      extractPdfPages: async () => '[]',
+      extractOutline: async () => {
+        throw new Error('PdfBox failed');
+      },
+    });
+    await expect(extractPdfOutlineNative('file:///a.pdf')).resolves.toBeNull();
   });
 });
 

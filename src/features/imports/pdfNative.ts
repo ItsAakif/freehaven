@@ -11,10 +11,12 @@
 import * as pdfTextModule from '../../../modules/pdf-text';
 
 export type PdfTextPage = { page: number; text: string };
+export type PdfTextOutlineItem = { title: string; page: number };
 
 export type PdfTextModuleLike = {
   isPdfTextAvailable(): boolean;
   extractPdfPages(path: string): Promise<string | null>;
+  extractOutline?(path: string): Promise<string | null>;
 };
 
 let override: PdfTextModuleLike | null = null;
@@ -69,6 +71,42 @@ export async function extractPdfPagesNative(
     if (!module.isPdfTextAvailable()) return null;
     const json = await module.extractPdfPages(pdfUriToFilePath(sourceUri));
     return parsePages(json);
+  } catch {
+    return null;
+  }
+}
+
+function parseOutline(json: string | null): PdfTextOutlineItem[] | null {
+  if (typeof json !== 'string') return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(json);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(value)) return null;
+
+  const items: PdfTextOutlineItem[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue;
+    const record = entry as { title?: unknown; page?: unknown };
+    if (typeof record.title !== 'string' || !record.title.trim()) continue;
+    if (typeof record.page !== 'number' || !Number.isFinite(record.page)) continue;
+    items.push({ title: record.title.trim(), page: Math.trunc(record.page) });
+  }
+  return items.length ? items : null;
+}
+
+/** Native outline, or null when the module/method/JSON is unavailable. */
+export async function extractPdfOutlineNative(
+  sourceUri: string,
+): Promise<PdfTextOutlineItem[] | null> {
+  try {
+    const module = activeModule();
+    if (!module.isPdfTextAvailable()) return null;
+    if (typeof module.extractOutline !== 'function') return null;
+    const json = await module.extractOutline(pdfUriToFilePath(sourceUri));
+    return parseOutline(json);
   } catch {
     return null;
   }

@@ -419,6 +419,8 @@ export async function summariseBookDeep(input: {
   checkpoint?: SummaryCheckpoint;
   /** Internal used by chapter summaries; omitted by the spec's public callers. */
   sectionId?: string | null;
+  /** Multi-section scope for guide chapters. Takes precedence over `sectionId` when non-empty. */
+  sectionIds?: string[];
   title?: string;
 }): Promise<DeepSummaryResult> {
   const persist = input.persist !== false;
@@ -436,9 +438,12 @@ export async function summariseBookDeep(input: {
       if (section.title) titles.set(section.id, section.title);
     }
   }
-  const chunks = input.sectionId
-    ? allChunks.filter((chunk) => chunk.sectionId === input.sectionId)
-    : allChunks;
+  const scope = input.sectionIds?.length ? new Set(input.sectionIds) : null;
+  const chunks = scope
+    ? allChunks.filter((chunk) => !!chunk.sectionId && scope.has(chunk.sectionId))
+    : input.sectionId
+      ? allChunks.filter((chunk) => chunk.sectionId === input.sectionId)
+      : allChunks;
   const chunkById = new Map(chunks.map((chunk) => [chunk.id, chunk]));
   const windowInputs: WindowInput[] = chunks.map((chunk) => ({
     id: chunk.id,

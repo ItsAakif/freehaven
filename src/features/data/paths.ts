@@ -8,7 +8,7 @@
  */
 
 export const CACHE_DIRS = ['downloads', 'narration'] as const;
-export const PERSISTENT_DIRS = ['library', 'renditions', 'models'] as const;
+export const PERSISTENT_DIRS = ['library', 'renditions', 'models', 'guides'] as const;
 
 /** `renditions/<renditionId>` under Paths.document. */
 export function segmentDir(renditionId: string): string {
@@ -37,6 +37,26 @@ export function modelDir(bundleId: string): string {
 /** `models/downloads/<bundleFile>` under Paths.document (archive staging). */
 export function downloadPath(bundleFile: string): string {
   return `${modelsRoot()}/downloads/${bundleFile}`;
+}
+
+/** `guides/<guideId>` under Paths.document. */
+export function guideDir(guideId: string): string {
+  return `guides/${guideId}`;
+}
+
+/** `guides/<guideId>/<chapterId>` under Paths.document. */
+export function guideChapterDir(guideId: string, chapterId: string): string {
+  return `${guideDir(guideId)}/${chapterId}`;
+}
+
+/** `guides/<guideId>/<chapterId>/<ordinal>.<format>` under Paths.document. */
+export function guideChapterSegmentPath(
+  guideId: string,
+  chapterId: string,
+  ordinal: number,
+  format: 'mp3' | 'wav',
+): string {
+  return `${guideChapterDir(guideId, chapterId)}/${ordinal}.${format}`;
 }
 
 /**

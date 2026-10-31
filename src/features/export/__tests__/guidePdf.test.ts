@@ -103,6 +103,61 @@ describe('guide PDF pagination', () => {
     expect(wrapped.join('')).toBe('supercalifragilistic');
     expect(wrapped.every((line) => measure(line, 10) <= 30)).toBe(true);
   });
+
+  it('starts every topic on a fresh page when pageBreakPerTopic is true', () => {
+    const input = guideFrom(
+      'Opening line.\n\n## One\nShort one.\n\n## Two\nShort two.\n\n## Three\nShort three.',
+    );
+    const pages = layoutGuidePages({
+      ...input,
+      pageWidth: GUIDE_PAGE_WIDTH,
+      pageHeight: GUIDE_PAGE_HEIGHT,
+      margin: GUIDE_MARGIN,
+      footerHeight: GUIDE_FOOTER_HEIGHT,
+      pageBreakPerTopic: true,
+      measureText: measure,
+    });
+
+    const headingPages = pages
+      .map((page, index) => ({
+        index,
+        heading: page.lines.find((line) => line.role === 'heading'),
+      }))
+      .filter((entry) => !!entry.heading);
+
+    expect(headingPages).toHaveLength(3);
+    expect(new Set(headingPages.map((entry) => entry.index)).size).toBe(3);
+    for (const entry of headingPages.slice(1)) {
+      expect(pages[entry.index].lines[0].role).toBe('heading');
+      expect(pages[entry.index].lines[0].text).toBe(entry.heading!.text);
+    }
+  });
+
+  it('does not force page breaks by default', () => {
+    const input = guideFrom(
+      'Opening line.\n\n## One\nShort one.\n\n## Two\nShort two.\n\n## Three\nShort three.',
+    );
+    const compact = layoutGuidePages({
+      ...input,
+      pageWidth: GUIDE_PAGE_WIDTH,
+      pageHeight: GUIDE_PAGE_HEIGHT,
+      margin: GUIDE_MARGIN,
+      footerHeight: GUIDE_FOOTER_HEIGHT,
+      measureText: measure,
+    });
+    const forced = layoutGuidePages({
+      ...input,
+      pageWidth: GUIDE_PAGE_WIDTH,
+      pageHeight: GUIDE_PAGE_HEIGHT,
+      margin: GUIDE_MARGIN,
+      footerHeight: GUIDE_FOOTER_HEIGHT,
+      pageBreakPerTopic: true,
+      measureText: measure,
+    });
+
+    expect(compact.length).toBeLessThan(forced.length);
+    expect(compact.length).toBe(1);
+  });
 });
 
 describe('guide PDF rendering', () => {

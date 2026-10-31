@@ -3,6 +3,9 @@ import {
   CACHE_DIRS,
   PERSISTENT_DIRS,
   downloadPath,
+  guideChapterDir,
+  guideChapterSegmentPath,
+  guideDir,
   modelDir,
   modelsRoot,
   segmentDir,
@@ -14,13 +17,20 @@ describe('filesystem paths', () => {
     const overlap = CACHE_DIRS.filter((name) => (PERSISTENT_DIRS as readonly string[]).includes(name));
     expect(overlap).toEqual([]);
     expect(CACHE_DIRS).toEqual(['downloads', 'narration']);
-    expect(PERSISTENT_DIRS).toEqual(['library', 'renditions', 'models']);
+    expect(PERSISTENT_DIRS).toEqual(['library', 'renditions', 'models', 'guides']);
   });
 
   it('builds rendition segment paths under Paths.document', () => {
     expect(segmentDir('rd_1')).toBe('renditions/rd_1');
     expect(segmentPath('rd_1', 0, 'wav')).toBe('renditions/rd_1/0.wav');
     expect(segmentPath('rd_1', 12, 'mp3')).toBe('renditions/rd_1/12.mp3');
+  });
+
+  it('builds guide chapter segment paths under Paths.document/guides', () => {
+    expect(guideDir('gd_1')).toBe('guides/gd_1');
+    expect(guideChapterDir('gd_1', 'gc_2')).toBe('guides/gd_1/gc_2');
+    expect(guideChapterSegmentPath('gd_1', 'gc_2', 0, 'wav')).toBe('guides/gd_1/gc_2/0.wav');
+    expect(guideChapterSegmentPath('gd_1', 'gc_2', 3, 'mp3')).toBe('guides/gd_1/gc_2/3.mp3');
   });
 
   it('builds model and download paths under Paths.document/models', () => {

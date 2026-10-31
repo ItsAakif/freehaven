@@ -89,6 +89,76 @@ async function seedBook(count = 40): Promise<Chunk[]> {
   return chunks;
 }
 
+async function seedTwoSections(): Promise<void> {
+  await upsertCatalogueBook({
+    id: BOOK_ID,
+    provider: 'gutendex',
+    title: 'Compound Interest',
+    author: 'Ada Example',
+    subjects: [],
+    source: 'gutenberg',
+    sourceId: '1',
+    access: 'public_domain',
+    license: 'Public domain',
+  });
+  await saveDocument({
+    id: DOCUMENT_ID,
+    bookId: BOOK_ID,
+    format: 'text',
+    status: 'ready',
+    importedAt: Date.now(),
+  });
+  const sections: Section[] = [
+    {
+      id: 's1',
+      documentId: DOCUMENT_ID,
+      ordinal: 0,
+      title: 'Chapter One',
+      href: null,
+      startPage: 1,
+      endPage: 10,
+      charStart: null,
+      charEnd: null,
+      text: null,
+    },
+    {
+      id: 's2',
+      documentId: DOCUMENT_ID,
+      ordinal: 1,
+      title: 'Chapter Two',
+      href: null,
+      startPage: 11,
+      endPage: 20,
+      charStart: null,
+      charEnd: null,
+      text: null,
+    },
+  ];
+  const chunks: Chunk[] = [
+    {
+      id: 'c1',
+      documentId: DOCUMENT_ID,
+      sectionId: 's1',
+      ordinal: 0,
+      text: chunkText(1),
+      page: 1,
+      charStart: null,
+      charEnd: null,
+    },
+    {
+      id: 'c2',
+      documentId: DOCUMENT_ID,
+      sectionId: 's2',
+      ordinal: 1,
+      text: `UNIQUE_SECOND_SECTION ${chunkText(2)}`,
+      page: 11,
+      charStart: null,
+      charEnd: null,
+    },
+  ];
+  await replaceExtraction(DOCUMENT_ID, sections, chunks);
+}
+
 class FakeProvider implements AiProvider {
   readonly id = 'fake';
   readonly label = 'Fake';
@@ -236,6 +306,30 @@ describe('summariseBookDeep', () => {
     });
     expect(output.summaryId).toBeNull();
     expect(output.text.length).toBeGreaterThan(0);
+    expect(await listSummaries(BOOK_ID)).toHaveLength(0);
+  });
+
+  it('scopes to sectionIds and writes no summary when persist is false', async () => {
+    await seedTwoSections();
+    const provider = new FakeProvider();
+    const output = await summariseBookDeep({
+      bookId: BOOK_ID,
+      kind: 'chapter',
+      targetWords: 250,
+      provider,
+      persist: false,
+      sectionIds: ['s2'],
+    });
+
+    const mapCalls = provider.calls.filter((call) => call.task === 'notes');
+    expect(mapCalls.length).toBeGreaterThan(0);
+    const seen = new Set(
+      mapCalls.flatMap((call) => call.sources.map((source) => source.chunkId)),
+    );
+    expect(seen.has('c2')).toBe(true);
+    expect(seen.has('c1')).toBe(false);
+    expect(output.sourceChunkIds).toEqual(['c2']);
+    expect(output.summaryId).toBeNull();
     expect(await listSummaries(BOOK_ID)).toHaveLength(0);
   });
 

@@ -19,6 +19,9 @@ const TABLES = [
   'reviews',
   'plans',
   'plan_items',
+  'guides',
+  'guide_chapters',
+  'guide_chapter_segments',
   'conversations',
   'messages',
   'user_profile',
@@ -56,6 +59,7 @@ export async function storageUsage(): Promise<{
   cacheBytes: number;
   narrationBytes: number;
   modelBytes: number;
+  guideBytes: number;
 }> {
   const size = (dir: Directory) => {
     if (!dir.exists) return 0;
@@ -74,6 +78,7 @@ export async function storageUsage(): Promise<{
     cacheBytes,
     narrationBytes: size(new Directory(Paths.document, 'renditions')),
     modelBytes: size(new Directory(Paths.document, 'models')),
+    guideBytes: size(new Directory(Paths.document, 'guides')),
   };
 }
 

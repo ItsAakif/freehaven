@@ -49,6 +49,8 @@ export type GuidePdfLayoutOptions = GuidePdfInput & {
   margin?: number;
   headerHeight?: number;
   footerHeight?: number;
+  /** Start every topic after the first on a fresh page. Default false. */
+  pageBreakPerTopic?: boolean;
   measureText: (text: string, size: number, bold: boolean) => number;
 };
 
@@ -194,6 +196,10 @@ export function layoutGuidePages(options: GuidePdfLayoutOptions): GuidePdfPage[]
   }
 
   options.topics.forEach((topic, index) => {
+    if (index > 0 && options.pageBreakPerTopic) {
+      if (page && page.lines.length > 0) newPage();
+      else cursor = page?.first ? firstTop : nextTop;
+    }
     const headingText = `${index + 1}. ${topic.title}`;
     const headingSize = 15;
     const headingLineHeight = 20;
@@ -361,7 +367,7 @@ function drawMasthead(
 /** Render a complete guide PDF in memory. `logoBytes: null` skips the asset. */
 export async function buildGuidePdf(
   input: GuidePdfInput,
-  options: { logoBytes?: Uint8Array | null } = {},
+  options: { logoBytes?: Uint8Array | null; pageBreakPerTopic?: boolean } = {},
 ): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.TimesRoman);
@@ -386,6 +392,7 @@ export async function buildGuidePdf(
     margin: GUIDE_MARGIN,
     headerHeight: GUIDE_HEADER_HEIGHT,
     footerHeight: GUIDE_FOOTER_HEIGHT,
+    pageBreakPerTopic: options.pageBreakPerTopic ?? false,
     measureText: measure,
   });
 
@@ -461,8 +468,11 @@ export async function buildGuidePdf(
 }
 
 /** Build and write `Paths.cache/guide-<id>.pdf`, returning its shareable URI. */
-export async function writeGuidePdf(input: GuidePdfInput): Promise<string> {
-  const bytes = await buildGuidePdf(input);
+export async function writeGuidePdf(
+  input: GuidePdfInput,
+  options: { pageBreakPerTopic?: boolean } = {},
+): Promise<string> {
+  const bytes = await buildGuidePdf(input, options);
   const safeId = input.id.replace(/[^a-zA-Z0-9._-]+/g, '-');
   const file = new File(Paths.cache, `guide-${safeId}.pdf`);
   if (file.exists) file.delete();

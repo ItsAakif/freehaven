@@ -3,6 +3,8 @@ package expo.modules.pdftext
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException
+import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageDestination
+import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineNode
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -62,6 +64,39 @@ class PdfTextModule : Module() {
         } catch (_: IOException) {
           // Closing a document that was never fully loaded is harmless.
         }
+      }
+    }
+
+    AsyncFunction("extractOutline") { path: String ->
+      val context = appContext.reactContext
+        ?: throw IllegalStateException("No Android context is available for PDF extraction.")
+      PDFBoxResourceLoader.init(context.applicationContext)
+      val file = File(path)
+      if (!file.isFile) throw IllegalArgumentException("PDF file not found: $path")
+
+      var document: PDDocument? = null
+      try {
+        val doc = PDDocument.load(file)
+        document = doc
+        val items = JSONArray()
+        val root = doc.documentCatalog.documentOutline
+        fun walk(node: PDOutlineNode?) {
+          var child = node?.firstChild
+          while (child != null) {
+            val title = child.title?.trim().orEmpty()
+            val dest = child.destination
+            val page = if (dest is PDPageDestination) dest.retrievePageNumber() else -1
+            if (title.isNotEmpty() && page >= 0) {
+              items.put(JSONObject().put("title", title).put("page", page + 1))
+            }
+            walk(child)
+            child = child.nextSibling
+          }
+        }
+        walk(root)
+        items.toString()
+      } finally {
+        try { document?.close() } catch (_: IOException) {}
       }
     }
   }

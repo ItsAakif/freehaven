@@ -10,7 +10,6 @@ import type {
   QueuedSegment,
   Rendition,
   RenditionEngine,
-  RenditionSegment,
 } from '@/domain/narration';
 import {
   getRendition,
@@ -28,30 +27,19 @@ import { summariseBookDeep, type SummaryCheckpoint } from '@/features/learning/s
 import { computeOffsets, estimatedDurationMs } from './manifest';
 import { wordsForMinutes } from './lengths';
 import { maxCharsForEngine, planSpeechSegments } from './segments';
-import { speechCacheKey, type SpeechFormat, type SpeechRequest } from './cacheKey';
+import { speechCacheKey, type SpeechFormat } from './cacheKey';
 import { instructionHash, sanitiseInstruction } from './script';
 import { getNarrationStyle } from './styles';
 import { resolveNarrationEngine, type NarrationEngine } from './engines';
-
-const DEFAULT_REMOTE_MODEL = 'tts-1';
+import {
+  buildSpeechRequest,
+  engineFormat,
+  remoteBaseUrl,
+} from './speechRequest';
+import { synthesiseRows, type SynthesisRow } from './synthesisCore';
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function engineFormat(engine: RenditionEngine): SpeechFormat {
-  return engine === 'remote' ? 'mp3' : 'wav';
-}
-
-function engineVoice(rendition: Rendition, engine: RenditionEngine): string {
-  if (rendition.voice) return rendition.voice;
-  const style = getNarrationStyle(rendition.styleId);
-  return style.defaultVoices[engine] ?? 'default';
-}
-
-function engineModel(rendition: Rendition, engine: RenditionEngine): string {
-  if (rendition.model) return rendition.model;
-  return engine === 'remote' ? DEFAULT_REMOTE_MODEL : engine;
 }
 
 /** Lazy so Jest never imports Expo at module load. */
@@ -81,40 +69,26 @@ function ensureSegmentDirectory(renditionId: string): void {
   }
 }
 
-/** Lazy preference read; only remote synthesis needs the endpoint. */
-function remoteBaseUrl(): string | undefined {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { usePreferences } = require('@/state/preferences') as typeof import('@/state/preferences');
-    const url = usePreferences.getState().aiBaseUrl;
-    return url ? String(url) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function buildRequest(
   rendition: Rendition,
-  segment: RenditionSegment,
+  segment: Pick<SynthesisRow, 'text' | 'ordinal'>,
   engine: RenditionEngine,
   format: SpeechFormat,
-): SpeechRequest {
-  const style = getNarrationStyle(rendition.styleId);
-  return {
-    text: segment.text,
-    language: rendition.language,
-    voice: engineVoice(rendition, engine),
-    model: engineModel(rendition, engine),
+): ReturnType<typeof buildSpeechRequest> {
+  return buildSpeechRequest({
     engine,
-    styleId: style.id,
-    instructions: style.directive,
-    instructionHash: rendition.instructionHash ?? instructionHash(rendition.instruction ?? ''),
-    baseUrl: engine === 'remote' ? remoteBaseUrl() : undefined,
+    styleId: getNarrationStyle(rendition.styleId).id,
+    language: rendition.language,
+    voice: rendition.voice,
+    model: rendition.model,
+    instruction: rendition.instruction,
+    instructionHash:
+      rendition.instructionHash ?? instructionHash(rendition.instruction ?? ''),
+    text: segment.text,
     format,
+    baseUrl: engine === 'remote' ? remoteBaseUrl() : undefined,
     destPath: engine === 'device' ? undefined : destPathFor(rendition.id, segment.ordinal, format),
-    speakerId: engine === 'kokoro' ? style.kokoroSpeakerId : undefined,
-    speed: 1,
-  };
+  });
 }
 
 type ScriptBlock = { heading: string | null; text: string };
@@ -174,20 +148,19 @@ export function planRenditionSegments(input: {
     const pieces = planSpeechSegments(block.text, maxChars);
     for (let pieceIndex = 0; pieceIndex < pieces.length; pieceIndex += 1) {
       const piece = pieces[pieceIndex];
-      const request: SpeechRequest = {
-        text: piece.text,
-        language: rendition.language,
-        voice: engineVoice(rendition, engine),
-        model: engineModel(rendition, engine),
+      const request = buildSpeechRequest({
         engine,
         styleId: style.id,
-        instructions: style.directive,
-        instructionHash: rendition.instructionHash ?? instructionHash(rendition.instruction ?? ''),
-        baseUrl: engine === 'remote' ? remoteBaseUrl() : undefined,
+        language: rendition.language,
+        voice: rendition.voice,
+        model: rendition.model,
+        instruction: rendition.instruction,
+        instructionHash:
+          rendition.instructionHash ?? instructionHash(rendition.instruction ?? ''),
+        text: piece.text,
         format,
-        speakerId: engine === 'kokoro' ? style.kokoroSpeakerId : undefined,
-        speed: 1,
-      };
+        baseUrl: engine === 'remote' ? remoteBaseUrl() : undefined,
+      });
       out.push({
         sectionId: section?.id ?? null,
         sectionOrdinal: blockIndex,
@@ -296,95 +269,49 @@ export async function synthesiseRendition(input: {
   await setRenditionStatus(rendition.id, 'synthesising');
   if (engine.producesFiles) ensureSegmentDirectory(rendition.id);
 
-  let segments = await listSegments(rendition.id);
-  let done = 0;
-  let failed = 0;
-  let cancelled = false;
+  const planned = await listSegments(rendition.id);
+  const idByOrdinal = new Map(planned.map((segment) => [segment.ordinal, segment.id]));
+  const rows: SynthesisRow[] = planned.map((segment) => ({
+    ordinal: segment.ordinal,
+    text: segment.text,
+    speechKey: segment.speechKey,
+    status: segment.status,
+    filePath: segment.filePath,
+    format: segment.format,
+    durationMs: segment.durationMs,
+    timingsJson: segment.timingsJson,
+  }));
 
-  for (const segment of segments) {
-    if (segment.status === 'ready') {
-      await input.onSegment?.({
-        ordinal: segment.ordinal,
-        speechKey: segment.speechKey ?? '',
-        status: 'skipped',
-        durationMs: segment.durationMs ?? undefined,
-      });
-      done += 1;
-      continue;
-    }
-    if (input.signal?.aborted) {
-      cancelled = true;
-      break;
-    }
+  const result = await synthesiseRows({
+    rows,
+    engine,
+    format: engineFormat(engine.id),
+    requestFor: (row) =>
+      buildRequest(
+        rendition,
+        row,
+        engine.id,
+        row.format ?? engineFormat(engine.id),
+      ),
+    onDone: async (row, patch) => {
+      const id = idByOrdinal.get(row.ordinal);
+      if (id) await updateSegment(id, patch);
+    },
+    onFailed: async (row, error) => {
+      const id = idByOrdinal.get(row.ordinal);
+      if (id) await updateSegment(id, { status: 'failed', error });
+    },
+    onSegment: input.onSegment,
+    onProgress: input.onProgress,
+    signal: input.signal,
+  });
 
-    const format =
-      segment.format ?? engineFormat(engine.id);
-    const request = buildRequest(rendition, segment, engine.id, format);
-    const speechKey = speechCacheKey(request);
-
-    await input.onSegment?.({
-      ordinal: segment.ordinal,
-      speechKey,
-      status: 'start',
-    });
-
-    try {
-      if (!engine.producesFiles) {
-        // Device narration never produces a file; the segment is ready for
-        // expo-speech as long as the text is stored.
-        await updateSegment(segment.id, {
-          status: 'ready',
-          filePath: null,
-          format: null,
-          durationMs: estimatedDurationMs(segment.text),
-          bytes: null,
-          speechKey,
-          error: null,
-        });
-      } else {
-        const asset = await engine.synthesize(request);
-        await updateSegment(segment.id, {
-          status: 'ready',
-          filePath: asset.uri,
-          format: asset.format,
-          durationMs: estimatedDurationMs(segment.text),
-          bytes: asset.bytes,
-          timingsJson: asset.timings?.length ? JSON.stringify(asset.timings) : null,
-          speechKey,
-          error: null,
-        });
-      }
-      done += 1;
-      await input.onSegment?.({
-        ordinal: segment.ordinal,
-        speechKey,
-        status: 'done',
-        durationMs: estimatedDurationMs(segment.text),
-      });
-    } catch (error) {
-      failed += 1;
-      await updateSegment(segment.id, {
-        status: 'failed',
-        error: errorMessage(error),
-      });
-      await input.onSegment?.({
-        ordinal: segment.ordinal,
-        speechKey,
-        status: 'failed',
-      });
-    }
-
-    input.onProgress?.({ done, total: segments.length, failed });
-  }
-
-  input.onProgress?.({ done, total: segments.length, failed });
-
-  if (cancelled) {
+  if (result.cancelled) {
     await setRenditionStatus(rendition.id, 'failed', 'cancelled');
-    return { done, failed };
+    return { done: result.done, failed: result.failed };
   }
 
-  segments = await listSegments(rendition.id);
+  const segments = await listSegments(rendition.id);
   const offsets = computeOffsets(
     segments.map((segment) => ({ durationMs: segment.durationMs, text: segment.text })),
   );
@@ -403,9 +330,9 @@ export async function synthesiseRendition(input: {
 
   await setRenditionStatus(
     rendition.id,
-    failed === 0 ? 'ready' : 'failed',
-    failed === 0 ? null : `${failed} segment(s) failed`,
+    result.failed === 0 ? 'ready' : 'failed',
+    result.failed === 0 ? null : `${result.failed} segment(s) failed`,
   );
 
-  return { done, failed };
+  return { done: result.done, failed: result.failed };
 }

@@ -9,6 +9,7 @@ import { useAsync } from '@/hooks/useAsync';
 import { countLibrary, listRecentBooks } from '@/data/repositories/books';
 import { getReadingPosition, listHighlightsWithBooks } from '@/data/repositories/reading';
 import { dueCount, listRecentSummaries, reviewStats } from '@/data/repositories/learning';
+import { guideForToday, type TodayGuide } from '@/data/repositories/guides';
 import { searchCatalogue } from '@/providers/catalogue';
 import { getProfile, type Profile } from '@/data/repositories/profile';
 import { minutesToday } from '@/data/repositories/activity';
@@ -27,6 +28,7 @@ type TodayData = {
   picks: CatalogueBook[];
   profile: Profile;
   minutes: number;
+  guideToday: TodayGuide | null;
 };
 
 function greeting() {
@@ -35,6 +37,132 @@ function greeting() {
   if (h < 12) return 'Good morning';
   if (h < 18) return 'Good afternoon';
   return 'Good evening';
+}
+
+function chapterDuration(ms: number | null | undefined): string | null {
+  if (!ms || ms <= 0) return null;
+  const totalSeconds = Math.round(ms / 1000);
+  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
+}
+
+/** Calm daily-path card. One guide at a time, paced by `chapters_per_day`. */
+function GuideTodayCard({ guideToday }: { guideToday: TodayGuide }) {
+  const { palette } = useTheme();
+
+  if (guideToday.kind === 'next') {
+    const { chapter, guide, bookTitle, total, done } = guideToday;
+    const duration = chapterDuration(chapter.durationMs);
+    return (
+      <Card style={{ backgroundColor: palette.surfaceAlt, borderColor: palette.line }}>
+        <AppText variant="label" muted>
+          TODAY’S CHAPTER
+        </AppText>
+        <AppText variant="title" serif style={{ marginTop: 2 }} numberOfLines={2}>
+          {chapter.title}
+        </AppText>
+        <AppText variant="caption" muted style={{ marginTop: 4 }}>
+          {bookTitle} · Chapter {chapter.ordinal + 1} of {total}
+          {duration ? ` · ${duration}` : ''}
+        </AppText>
+        <ProgressBar value={total ? done / total : 0} style={{ marginTop: space.md }} />
+        <View
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginTop: space.sm,
+          }}
+        >
+          <AppText variant="caption" faint>
+            {done}/{total} chapters
+          </AppText>
+          <Button
+            label="Play"
+            icon="play"
+            size="sm"
+            onPress={() =>
+              router.push({
+                pathname: '/listen/[id]',
+                params: { id: guide.bookId, guideChapter: chapter.id },
+              })
+            }
+          />
+        </View>
+      </Card>
+    );
+  }
+
+  if (guideToday.kind === 'done_today') {
+    const { guide, next, total, done, streakDays } = guideToday;
+    return (
+      <Card style={{ backgroundColor: palette.surfaceAlt, borderColor: palette.line }}>
+        <AppText variant="label" muted>
+          FULL GUIDE
+        </AppText>
+        <AppText variant="title" serif style={{ marginTop: 2 }}>
+          Today’s chapter is done
+        </AppText>
+        <AppText variant="caption" muted style={{ marginTop: 4 }}>
+          {next ? `Next: ${next.title} · tomorrow` : 'More chapters are still generating'}
+        </AppText>
+        <ProgressBar value={total ? done / total : 0} style={{ marginTop: space.md }} />
+        <View
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginTop: space.sm,
+          }}
+        >
+          <AppText variant="caption" faint>
+            {done}/{total} chapters
+            {streakDays > 0 ? ` · ${streakDays}-day streak` : ''}
+          </AppText>
+          <Button
+            label="Open guide"
+            variant="secondary"
+            size="sm"
+            onPress={() =>
+              router.push({ pathname: '/full-guide/[guideId]', params: { guideId: guide.id } })
+            }
+          />
+        </View>
+      </Card>
+    );
+  }
+
+  const { guide, total, streakDays } = guideToday;
+  return (
+    <Card style={{ backgroundColor: palette.accentSoft, borderColor: palette.accentSoft }}>
+      <AppText variant="label" muted>
+        FULL GUIDE
+      </AppText>
+      <AppText variant="title" serif style={{ marginTop: 2 }}>
+        Full guide complete
+      </AppText>
+      <AppText variant="caption" muted style={{ marginTop: 4 }}>
+        {total} chapters{streakDays > 0 ? ` · ${streakDays}-day streak` : ''}
+      </AppText>
+      <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md, flexWrap: 'wrap' }}>
+        <Button
+          label="Open guide"
+          size="sm"
+          onPress={() =>
+            router.push({ pathname: '/full-guide/[guideId]', params: { guideId: guide.id } })
+          }
+        />
+        <Button
+          label="Download PDF"
+          icon="download-outline"
+          variant="secondary"
+          size="sm"
+          onPress={() =>
+            router.push({ pathname: '/full-guide/[guideId]', params: { guideId: guide.id } })
+          }
+        />
+      </View>
+    </Card>
+  );
 }
 
 export default function TodayScreen() {
@@ -55,7 +183,11 @@ export default function TodayScreen() {
       listHighlightsWithBooks(),
       listRecentSummaries(3),
     ]);
-    const [profile, minutes] = await Promise.all([getProfile(), minutesToday()]);
+    const [profile, minutes, guideToday] = await Promise.all([
+      getProfile(),
+      minutesToday(),
+      guideForToday(),
+    ]);
 
     let continueBook: TodayData['continueBook'] = null;
     for (const book of recent) {
@@ -86,6 +218,7 @@ export default function TodayScreen() {
       picks,
       profile,
       minutes,
+      guideToday,
     };
   }, [tick]);
 
@@ -213,6 +346,12 @@ export default function TodayScreen() {
               </View>
             </View>
           </Card>
+        </Reveal>
+      ) : null}
+
+      {data?.guideToday ? (
+        <Reveal delay={50}>
+          <GuideTodayCard guideToday={data.guideToday} />
         </Reveal>
       ) : null}
 
