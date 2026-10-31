@@ -59,6 +59,25 @@ type ReaderMessage =
   | { type: 'mark'; id: string }
   | { type: 'jump'; found: boolean };
 
+/** PDF imports often leave blank cover/plate sections behind; readers skip them. */
+function isReadableSection(section: Section | undefined): boolean {
+  return !!section && (section.text ?? '').trim().length > 0;
+}
+
+function nextReadableIndex(sections: Section[], from: number): number {
+  for (let candidate = Math.max(0, from); candidate < sections.length; candidate += 1) {
+    if (isReadableSection(sections[candidate])) return candidate;
+  }
+  return -1;
+}
+
+function prevReadableIndex(sections: Section[], from: number): number {
+  for (let candidate = Math.min(from, sections.length - 1); candidate >= 0; candidate -= 1) {
+    if (isReadableSection(sections[candidate])) return candidate;
+  }
+  return -1;
+}
+
 export default function ReaderScreen() {  const { id, locator: locatorParam } = useLocalSearchParams<{ id: string; locator?: string }>();
   const { palette } = useTheme();
   const webRef = useRef<any>(null);
@@ -108,14 +127,27 @@ export default function ReaderScreen() {  const { id, locator: locatorParam } = 
   useEffect(() => {
     if (!state.data?.sections?.length) return;
     setHighlights(state.data.highlightsForBook ?? []);
+    const list = state.data.sections as Section[];
     const initial = decodeLocator(locatorParam) ?? decodeLocator(state.data.position?.locator ?? null);
-    const found = initial ? state.data.sections.findIndex((s) => s.id === initial.sectionId) : -1;
-    setIndex(found >= 0 ? found : 0);
+    const found = initial ? list.findIndex((s) => s.id === initial.sectionId) : -1;
+    const firstReadable = nextReadableIndex(list, 0);
+    // A saved locator can point at a blank section from an older import; move forward.
+    const target = found >= 0 ? nextReadableIndex(list, found) : firstReadable;
+    setIndex(target >= 0 ? target : firstReadable >= 0 ? firstReadable : 0);
     if (initial?.quote) setJumpText(initial.quote);
   }, [state.data, locatorParam]);
 
   const sections = useMemo(() => (state.data?.sections ?? []) as Section[], [state.data?.sections]);
   const section = sections[index];
+  const readableSections = useMemo(
+    () =>
+      sections
+        .map((item, sectionIndex) => ({ section: item, sectionIndex }))
+        .filter(({ section: item }) => isReadableSection(item)),
+    [sections],
+  );
+  const nextIndex = useMemo(() => nextReadableIndex(sections, index + 1), [sections, index]);
+  const prevIndex = useMemo(() => prevReadableIndex(sections, index - 1), [sections, index]);
   const paragraphs = useMemo(() => splitParagraphs(section?.text ?? ''), [section?.text]);
 
   const sectionHighlights: ReaderHighlight[] = useMemo(() => {
@@ -237,6 +269,14 @@ export default function ReaderScreen() {  const { id, locator: locatorParam } = 
     setIndex(clamped);
     setTocOpen(false);
     persistPosition(clamped, 0);
+  };
+
+  const goNext = () => {
+    if (nextIndex >= 0) changeSection(nextIndex);
+  };
+
+  const goPrev = () => {
+    if (prevIndex >= 0) changeSection(prevIndex);
   };
 
   const runSearch = async () => {
@@ -377,7 +417,7 @@ export default function ReaderScreen() {  const { id, locator: locatorParam } = 
           </AppText>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Button label="Prev" variant="ghost" size="sm" icon="chevron-back" disabled={index === 0} onPress={() => changeSection(index - 1)} />
+          <Button label="Prev" variant="ghost" size="sm" icon="chevron-back" disabled={prevIndex < 0} onPress={goPrev} />
           <View style={{ flexDirection: 'row', gap: space.xs }}>
             <IconButton
               name="bookmark-outline"
@@ -397,8 +437,8 @@ export default function ReaderScreen() {  const { id, locator: locatorParam } = 
             variant="ghost"
             size="sm"
             icon="chevron-forward"
-            disabled={index >= sections.length - 1}
-            onPress={() => changeSection(index + 1)}
+            disabled={nextIndex < 0}
+            onPress={goNext}
           />
         </View>
       </View>
@@ -423,22 +463,22 @@ export default function ReaderScreen() {  const { id, locator: locatorParam } = 
       ) : null}
 
       <Sheet visible={tocOpen} onClose={() => setTocOpen(false)} title="Contents">
-        {sections.map((item, i) => (
+        {readableSections.map(({ section: item, sectionIndex }) => (
           <Pressable
             key={item.id}
-            onPress={() => changeSection(i)}
+            onPress={() => changeSection(sectionIndex)}
             accessibilityRole="button"
-            accessibilityLabel={item.title ?? `Section ${i + 1}`}
+            accessibilityLabel={item.title ?? `Section ${sectionIndex + 1}`}
             style={{ paddingVertical: space.md, borderBottomWidth: 1, borderBottomColor: palette.line }}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
               <AppText variant="caption" faint style={{ width: 26 }}>
-                {i + 1}
+                {sectionIndex + 1}
               </AppText>
-              <AppText variant="bodySm" numberOfLines={2} style={{ flex: 1, fontWeight: i === index ? '700' : '400' }}>
-                {item.title ?? `Section ${i + 1}`}
+              <AppText variant="bodySm" numberOfLines={2} style={{ flex: 1, fontWeight: sectionIndex === index ? '700' : '400' }}>
+                {item.title ?? `Section ${sectionIndex + 1}`}
               </AppText>
-              {i === index ? <Icon name="ellipse" size={7} color={palette.accent} /> : null}
+              {sectionIndex === index ? <Icon name="ellipse" size={7} color={palette.accent} /> : null}
             </View>
           </Pressable>
         ))}

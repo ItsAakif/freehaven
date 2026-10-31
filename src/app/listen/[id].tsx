@@ -89,6 +89,15 @@ function formatDuration(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
+/** Script segments carry a heading only on their first piece; carry it forward. */
+function sectionTitleForSegment(segments: RenditionSegment[], index: number): string {
+  for (let cursor = Math.min(index, segments.length - 1); cursor >= 0; cursor -= 1) {
+    const title = (segments[cursor]?.title ?? '').trim();
+    if (title) return title;
+  }
+  return '';
+}
+
 type Loaded = {
   book: Awaited<ReturnType<typeof getBook>>;
   document: Awaited<ReturnType<typeof getDocument>>;
@@ -810,7 +819,11 @@ export default function ListenScreen() {
     );
   });
   const overall = totalMs > 0 ? Math.min(1, absolutePosition / totalMs) : 0;
-  const currentTitle = currentSegment?.title ?? book.title;
+  const currentSectionTitle = sectionTitleForSegment(segments, index);
+  const currentTitle =
+    currentSectionTitle && currentSectionTitle.toLowerCase() !== book.title.trim().toLowerCase()
+      ? currentSectionTitle
+      : 'Section';
   const activeVoiceName =
     voices.find((voice) => voice.identifier === narrationVoice)?.name ??
     NARRATION_LANGUAGES.find((option) => option.id === language)?.label ??

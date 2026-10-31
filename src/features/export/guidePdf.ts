@@ -258,11 +258,24 @@ async function loadBrandLockup(): Promise<Uint8Array | null> {
     const { Asset } = require('expo-asset') as typeof import('expo-asset');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { File: FsFile } = require('expo-file-system') as typeof import('expo-file-system');
-    const asset = Asset.fromModule(require('../../../assets/images/brand-lockup.png'));
-    await asset.downloadAsync();
-    const uri = asset.localUri ?? asset.uri;
-    if (!uri) return null;
-    return await new FsFile(uri).bytes();
+    const candidates = [
+      // The opaque app icon is the safest source for pdf-lib; the lockup is a fallback.
+      require('../../../assets/images/icon.png'),
+      require('../../../assets/images/brand-lockup.png'),
+    ];
+    for (const source of candidates) {
+      try {
+        const asset = Asset.fromModule(source);
+        await asset.downloadAsync();
+        const uri = asset.localUri ?? asset.uri;
+        if (!uri) continue;
+        const bytes = await new FsFile(uri).bytes();
+        if (bytes.length) return bytes;
+      } catch {
+        // Try the next candidate; a missing asset must not fail the export.
+      }
+    }
+    return null;
   } catch {
     return null;
   }
@@ -289,6 +302,17 @@ function drawMasthead(
     width,
     height: 4,
     color: TEAL_SOFT,
+  });
+
+  // Always print the wordmark, even when the logo image could not be embedded.
+  const wordmark = 'FREEHAVEN';
+  const wordmarkSize = 10;
+  page.drawText(wordmark, {
+    x: width - GUIDE_MARGIN - fonts.bold.widthOfTextAtSize(wordmark, wordmarkSize),
+    y: height - GUIDE_MARGIN,
+    size: wordmarkSize,
+    font: fonts.bold,
+    color: WHITE,
   });
 
   let baseline = height - GUIDE_MARGIN;

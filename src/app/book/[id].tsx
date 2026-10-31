@@ -158,6 +158,9 @@ export default function BookDetailScreen() {
   }
 
   const { book, document, position, summaries, cards, highlights, sections, mastery, renditions, probes } = state.data;
+  const contentSections = sections
+    .map((section, index) => ({ section, index }))
+    .filter(({ section }) => (section.text ?? '').trim().length > 0);
   const guideRendition = renditions.find((rendition) => !!rendition.scriptMd) ?? null;
   const readMinutes = document ? Math.max(1, Math.round((document.wordCount ?? 0) / 220)) : null;
   const canDownload = book.access === 'public_domain' && (!!book.epubUrl || !!book.sourceId);
@@ -379,10 +382,10 @@ export default function BookDetailScreen() {
 
       <Divider />
 
-      {sections.length ? (
+      {contentSections.length ? (
         <View style={{ gap: space.sm }}>
-          <SectionHeader title="Contents" actionLabel={`${sections.length} sections`} />
-          {sections.slice(0, 8).map((section, index) => (
+          <SectionHeader title="Contents" actionLabel={`${contentSections.length} sections`} />
+          {contentSections.slice(0, 8).map(({ section, index }) => (
             <Card
               key={section.id}
               onPress={() =>
@@ -412,7 +415,7 @@ export default function BookDetailScreen() {
               </View>
             </Card>
           ))}
-          {sections.length > 8 ? (
+          {contentSections.length > 8 ? (
             <AppText variant="caption" faint>
               Showing the first 8. Open the reader for the full table of contents.
             </AppText>
