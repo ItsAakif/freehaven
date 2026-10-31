@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useKeepAwake } from 'expo-keep-awake';
 import {
   Screen,
   Header,
@@ -90,7 +89,36 @@ function isStale(job: JobRecord, now: number): boolean {
 }
 
 function KeepAwakeWhileRunning() {
-  useKeepAwake('narration-generation');
+  useEffect(() => {
+    const tag = 'narration-generation';
+    let cancelled = false;
+    let activated = false;
+
+    const activate = async () => {
+      try {
+        const keepAwake = await import('expo-keep-awake');
+        await keepAwake.activateKeepAwakeAsync(tag);
+        activated = true;
+        if (cancelled) {
+          activated = false;
+          await keepAwake.deactivateKeepAwake(tag).catch(() => {});
+        }
+      } catch {
+        // Keeping the screen awake is a comfort feature, never a job blocker.
+      }
+    };
+
+    void activate();
+
+    return () => {
+      cancelled = true;
+      if (!activated) return;
+      activated = false;
+      void import('expo-keep-awake')
+        .then((keepAwake) => keepAwake.deactivateKeepAwake(tag))
+        .catch(() => {});
+    };
+  }, []);
   return null;
 }
 

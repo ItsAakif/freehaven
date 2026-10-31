@@ -6,8 +6,9 @@ import {
   recoverGenerationOnLaunch,
   subscribeToForegroundRecovery,
 } from '@/features/jobs/launch';
+import type { DatabaseStartupStatus } from '@/lib/startup';
 
-type Status = 'loading' | 'ready' | 'error';
+type Status = DatabaseStartupStatus;
 
 // Module scope: one listener per process, independent of provider remounts.
 subscribeToForegroundRecovery();
@@ -17,7 +18,14 @@ const DatabaseContext = createContext<{ status: Status; retry: () => void }>({
   retry: () => {},
 });
 
-export function DatabaseProvider({ children }: { children: React.ReactNode }) {
+export function DatabaseProvider({
+  children,
+  onStatusChange,
+}: {
+  children: React.ReactNode;
+  /** Lets the splash gate hide even while this provider shows its error UI. */
+  onStatusChange?: (status: Status) => void;
+}) {
   const { palette } = useTheme();
   const [status, setStatus] = useState<Status>('loading');
   const [message, setMessage] = useState('');
@@ -27,6 +35,10 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     setStatus('loading');
     setNonce((n) => n + 1);
   }, []);
+
+  useEffect(() => {
+    onStatusChange?.(status);
+  }, [onStatusChange, status]);
 
   useEffect(() => {
     let cancelled = false;

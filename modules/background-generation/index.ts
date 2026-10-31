@@ -10,7 +10,7 @@
  * of these exports can throw there.
  */
 
-import { requireOptionalNativeModule } from 'expo';
+import { requireOptionalNativeModule } from 'expo-modules-core';
 
 type BackgroundGenerationNativeModule = {
   /** Starts the foreground service. Text is shown on the first notification. */
@@ -34,8 +34,13 @@ export type BackgroundGenerationUpdateInput = {
   progress: number;
 };
 
-const nativeModule =
-  requireOptionalNativeModule<BackgroundGenerationNativeModule>('BackgroundGeneration');
+let nativeModule: BackgroundGenerationNativeModule | null = null;
+try {
+  nativeModule = requireOptionalNativeModule<BackgroundGenerationNativeModule>('BackgroundGeneration');
+} catch {
+  // Missing registration is expected on web, iOS and Expo Go.
+  nativeModule = null;
+}
 
 export function isBackgroundGenerationSupported(): boolean {
   return nativeModule != null;
@@ -45,17 +50,29 @@ export async function startBackgroundGeneration(
   input: BackgroundGenerationStartInput,
 ): Promise<void> {
   if (!nativeModule) return;
-  await nativeModule.start(input.title, input.text);
+  try {
+    await nativeModule.start(input.title, input.text);
+  } catch {
+    // The OS may refuse the foreground service; generation still runs.
+  }
 }
 
 export async function updateBackgroundGeneration(
   input: BackgroundGenerationUpdateInput,
 ): Promise<void> {
   if (!nativeModule) return;
-  await nativeModule.update(input.text, input.progress);
+  try {
+    await nativeModule.update(input.text, input.progress);
+  } catch {
+    // A stale notification must not fail the job.
+  }
 }
 
 export async function stopBackgroundGeneration(): Promise<void> {
   if (!nativeModule) return;
-  await nativeModule.stop();
+  try {
+    await nativeModule.stop();
+  } catch {
+    // Best effort: the service may already be gone.
+  }
 }

@@ -66,7 +66,8 @@
             "compileSdkVersion": 37,
             "buildToolsVersion": "37.0.0",
             "targetSdkVersion": 36,
-            "minSdkVersion": 24
+            "minSdkVersion": 24,
+            "extraProguardRules": "-keep class expo.modules.** { *; }\n-keep class com.sherpaonnx.** { *; }\n-keep class com.drpogodin.reactnativefs.** { *; }"
           }
         }
       ],
