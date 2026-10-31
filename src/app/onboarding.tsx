@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
 import { Icon } from '@/design/icon';
+import { BrandMark } from '@/design/brand';
 import {
   Screen,
   AppText,
@@ -112,6 +113,7 @@ export default function OnboardingScreen() {
 
       {step === 0 ? (
         <View style={{ gap: space.md }}>
+          <BrandMark size={72} style={{ marginBottom: space.xs }} />
           <AppText variant="caption" faint style={{ textTransform: 'uppercase', letterSpacing: 1.4 }}>
             Your profile
           </AppText>

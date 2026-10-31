@@ -5,6 +5,7 @@ import * as Notifications from 'expo-notifications';
 import * as Sharing from 'expo-sharing';
 import { Directory, File, Paths } from 'expo-file-system';
 import { Icon } from '@/design/icon';
+import { BrandLockup } from '@/design/brand';
 import {
   Screen,
   AppText,
@@ -734,6 +735,7 @@ export default function SettingsScreen() {
       <AppText variant="label" muted>
         About
       </AppText>
+      <BrandLockup height={40} />
       <AppText variant="caption" faint>
         Freehaven 0.1.0 · open source, local-first. No accounts, no ads, no telemetry. Public-domain texts come from
         Project Gutenberg under its terms.
