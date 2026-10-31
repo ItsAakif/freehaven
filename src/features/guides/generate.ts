@@ -35,6 +35,7 @@ import {
   remoteBaseUrl,
 } from '@/features/narration/speechRequest';
 import { instructionHash } from '@/features/narration/script';
+import { getForegroundBridge } from '@/features/jobs/foreground';
 import { resolveNarrationEngine, type NarrationEngine } from '@/features/narration/engines';
 import { synthesiseRows, type SynthesisRow } from '@/features/narration/synthesisCore';
 import {
@@ -50,6 +51,15 @@ const controllers = new Map<string, AbortController>();
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** A foreground notification must never fail or delay guide generation. */
+function fireForeground(run: () => Promise<void>): void {
+  try {
+    void run().catch(() => {});
+  } catch {
+    /* the OS is allowed to refuse a foreground service */
+  }
 }
 
 /** Lazy so Jest never imports Expo at module load. */
@@ -402,6 +412,8 @@ export async function startGuideGeneration(input: {
 
   const controller = new AbortController();
   controllers.set(input.guideId, controller);
+  const foreground = getForegroundBridge();
+  let foregroundStarted = false;
   const external = input.signal;
   const onExternalAbort = () => controller.abort();
   if (external) {
@@ -424,6 +436,23 @@ export async function startGuideGeneration(input: {
           .filter((chapter): chapter is GuideChapter => !!chapter)
       : all;
     const total = selected.length;
+    foregroundStarted = true;
+    fireForeground(() =>
+      foreground.start({
+        title: 'Building full guide',
+        text: `0 of ${total} chapters`,
+      }),
+    );
+
+    const reportChapter = (chapter: GuideChapter): void => {
+      const processed = completed + failed;
+      fireForeground(() =>
+        foreground.update({
+          text: `Chapter ${processed} of ${total} · ${chapter.title}`,
+          progress: total > 0 ? Math.round((processed / total) * 100) : 0,
+        }),
+      );
+    };
 
     for (const chapter of selected) {
       if (controller.signal.aborted) break;
@@ -431,12 +460,14 @@ export async function startGuideGeneration(input: {
       const skip = shouldSkip(chapter, input.mode);
       if (skip) {
         completed += 1;
+        reportChapter(chapter);
         input.onProgress?.({ done: completed, total, failed, chapterId: chapter.id });
         continue;
       }
       if (input.mode === 'audio' && !chapter.summaryMd) {
         await setGuideChapterStatus(chapter.id, 'failed', 'no_script');
         failed += 1;
+        reportChapter(chapter);
         input.onProgress?.({ done: completed, total, failed, chapterId: chapter.id });
         continue;
       }
@@ -457,6 +488,7 @@ export async function startGuideGeneration(input: {
         failed += 1;
       }
 
+      reportChapter(chapter);
       input.onProgress?.({ done: completed, total, failed, chapterId: chapter.id });
     }
 
@@ -469,6 +501,7 @@ export async function startGuideGeneration(input: {
     await setGuideStatus(guide.id, guideStatusFor(latest), null);
     return { completed, failed, cancelled: false, alreadyRunning: false };
   } finally {
+    if (foregroundStarted) fireForeground(() => foreground.stop());
     if (external) external.removeEventListener('abort', onExternalAbort);
     controllers.delete(input.guideId);
   }

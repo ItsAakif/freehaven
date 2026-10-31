@@ -13,6 +13,7 @@ import {
 } from '@/data/repositories/guides';
 import { wordCount } from '@/domain/text';
 import type { Chunk, Section } from '@/domain/types';
+import { setForegroundBridgeForTests } from '@/features/jobs/foreground';
 import type { NarrationEngine } from '@/features/narration/engines';
 import { GUIDE_CHAPTER_MAX_WORDS } from '@/features/guides/constants';
 import {
@@ -223,6 +224,14 @@ async function makeGuide(count = 2) {
   return { guide: (await getGuide(guide.id))!, chapters };
 }
 
+function installForeground() {
+  const start = jest.fn(async (_input: { title: string; text: string }) => {});
+  const update = jest.fn(async (_input: { text: string; progress: number }) => {});
+  const stop = jest.fn(async () => {});
+  setForegroundBridgeForTests({ start, update, stop });
+  return { start, update, stop };
+}
+
 describe('guide generation', () => {
   let driver: ReturnType<typeof createTestDriver>;
 
@@ -233,6 +242,7 @@ describe('guide generation', () => {
   });
 
   afterEach(async () => {
+    setForegroundBridgeForTests(null);
     await resetDriverForTests();
     try {
       await driver.close();
@@ -319,6 +329,7 @@ describe('guide generation', () => {
 
   it('does not start a second run while one is active', async () => {
     const { guide } = await makeGuide(1);
+    const foreground = installForeground();
     const first = startGuideGeneration({
       guideId: guide.id,
       mode: 'script',
@@ -338,6 +349,87 @@ describe('guide generation', () => {
       alreadyRunning: true,
     });
     await first;
+    expect(foreground.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('drives one foreground lifecycle, updating after every chapter', async () => {
+    const { guide } = await makeGuide(2);
+    const foreground = installForeground();
+
+    const result = await startGuideGeneration({
+      guideId: guide.id,
+      mode: 'script',
+      engine: deviceEngine,
+      provider: new FakeProvider(1),
+    });
+
+    expect(result).toEqual({
+      completed: 2,
+      failed: 0,
+      cancelled: false,
+      alreadyRunning: false,
+    });
+    expect(foreground.start).toHaveBeenCalledTimes(1);
+    expect(foreground.start.mock.calls[0][0]).toEqual({
+      title: 'Building full guide',
+      text: '0 of 2 chapters',
+    });
+
+    const updates = foreground.update.mock.calls.map(([input]) => input);
+    expect(updates).toHaveLength(2);
+    expect(updates.map((input) => input.text)).toEqual([
+      'Chapter 1 of 2 · Chapter 1',
+      'Chapter 2 of 2 · Chapter 2',
+    ]);
+    expect(updates.every((input) => input.progress >= 0 && input.progress <= 100)).toBe(true);
+    expect(updates[updates.length - 1].progress).toBe(100);
+
+    expect(foreground.stop).toHaveBeenCalledTimes(1);
+    const updateOrders = foreground.update.mock.invocationCallOrder;
+    expect(foreground.stop.mock.invocationCallOrder[0]).toBeGreaterThan(
+      updateOrders[updateOrders.length - 1],
+    );
+  });
+
+  it('stops the foreground service when the run is cancelled', async () => {
+    const { guide } = await makeGuide(2);
+    const foreground = installForeground();
+    const controller = new AbortController();
+
+    const result = await startGuideGeneration({
+      guideId: guide.id,
+      mode: 'script',
+      engine: deviceEngine,
+      provider: new FakeProvider(1),
+      signal: controller.signal,
+      onProgress: ({ done }) => {
+        if (done === 1) controller.abort();
+      },
+    });
+
+    expect(result.cancelled).toBe(true);
+    expect(foreground.start).toHaveBeenCalledTimes(1);
+    expect(foreground.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops the foreground service when the run throws', async () => {
+    const { guide } = await makeGuide(1);
+    const foreground = installForeground();
+
+    await expect(
+      startGuideGeneration({
+        guideId: guide.id,
+        mode: 'script',
+        engine: deviceEngine,
+        provider: new FakeProvider(1),
+        onProgress: () => {
+          throw new Error('progress exploded');
+        },
+      }),
+    ).rejects.toThrow('progress exploded');
+
+    expect(foreground.start).toHaveBeenCalledTimes(1);
+    expect(foreground.stop).toHaveBeenCalledTimes(1);
   });
 
   it('trims a 300-word chapter to the 287-word ceiling', async () => {
