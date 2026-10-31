@@ -20,6 +20,7 @@ package under `node_modules` after `npm ci`.
 | `jszip` | MIT (dual MIT/GPL-3.0; used under MIT) | EPUB container parsing |
 | `fast-xml-parser` | MIT | OPF/container parsing |
 | `pdf-lib` | MIT | PDF metadata and page count |
+| PdfBox-Android (`com.tom-roush:pdfbox-android`) | Apache-2.0 | Native Android PDF text extraction |
 | `pako` | MIT (zlib derivative) | FlateDecode streams |
 
 ## Local speech (optional on-device TTS)

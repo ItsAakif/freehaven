@@ -8,6 +8,7 @@ import { stripBoilerplateFromRawHtml, stripGutenbergBoilerplate } from './gutenb
 import type { BoilerplateResult, BoilerplateWarning } from './gutenberg';
 import { htmlTitle, htmlToText } from './html';
 import { parsePdf } from './pdf';
+import { extractPdfPagesNative } from './pdfNative';
 import { assessTextQuality } from './quality';
 import type { ImportQuality, NarrationEligibility, TextScript } from './quality';
 import {
@@ -241,12 +242,24 @@ function failedResult(input: {
 }
 
 /**
+ * The subset of PDF extraction metadata the import pipeline consumes, shared by
+ * the native PdfBox path and the pure-JS content-stream fallback.
+ */
+type PdfExtraction = {
+  title: string | null;
+  author: string | null;
+  pageCount: number;
+  pages: { page: number; text: string }[];
+  warnings: string[];
+};
+
+/**
  * Sniff bytes, pick a parser and assess the text. Pure apart from `parseEpub`
  * and `parsePdf`, so the whole dispatch is unit-testable in Node.
  */
 export async function extractDocument(
   bytes: Uint8Array,
-  input: { name: string; mimeType?: string | null; documentId?: string },
+  input: { name: string; mimeType?: string | null; documentId?: string; sourceUri?: string | null },
 ): Promise<ExtractedImport> {
   const name = input.name;
   const documentId = input.documentId;
@@ -330,27 +343,40 @@ export async function extractDocument(
   }
 
   if (sniff.format === 'pdf') {
-    let parsed: Awaited<ReturnType<typeof parsePdf>>;
-    try {
-      parsed = await parsePdf(bytes);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (/no text layer|text layer|scanned/i.test(message)) {
-        return failedResult({
-          format: 'pdf',
-          sourceFormat: 'pdf',
-          charset: 'binary',
-          title: titleFromName(name),
-          pageCount: 1,
-          quality: 'needs_ocr',
-          reasons: ['needs_ocr'],
-          boilerplate: emptyBoilerplate(),
-          narration: { allowed: false, maxLength: null, reason: 'needs_ocr' },
-          warnings: [message],
-          documentId,
-        });
+    let parsed: PdfExtraction;
+    const nativePages = input.sourceUri
+      ? await extractPdfPagesNative(input.sourceUri)
+      : null;
+    if (nativePages) {
+      parsed = {
+        title: null,
+        author: null,
+        pageCount: nativePages.length,
+        pages: nativePages,
+        warnings: [],
+      };
+    } else {
+      try {
+        parsed = await parsePdf(bytes);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (/no text layer|text layer|scanned/i.test(message)) {
+          return failedResult({
+            format: 'pdf',
+            sourceFormat: 'pdf',
+            charset: 'binary',
+            title: titleFromName(name),
+            pageCount: 1,
+            quality: 'needs_ocr',
+            reasons: ['needs_ocr'],
+            boilerplate: emptyBoilerplate(),
+            narration: { allowed: false, maxLength: null, reason: 'needs_ocr' },
+            warnings: [message],
+            documentId,
+          });
+        }
+        throw error;
       }
-      throw error;
     }
 
     const text = normalizeWhitespace(parsed.pages.map((page) => page.text).join('\n\n'));
@@ -539,6 +565,7 @@ export async function importBytes(input: {
       name: input.name,
       mimeType: input.mimeType,
       documentId,
+      sourceUri: input.filePath,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
