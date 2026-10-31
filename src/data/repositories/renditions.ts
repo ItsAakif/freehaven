@@ -53,6 +53,7 @@ type SegmentRow = {
   duration_ms: number | null;
   bytes: number | null;
   start_ms: number;
+  timings_json: string | null;
   status: string;
   error: string | null;
   created_at: number;
@@ -117,6 +118,7 @@ function mapSegment(row: SegmentRow): RenditionSegment {
     durationMs: row.duration_ms,
     bytes: row.bytes,
     startMs: row.start_ms,
+    timingsJson: row.timings_json ?? null,
     status: row.status as SegmentStatus,
     error: row.error,
     createdAt: row.created_at,
@@ -310,9 +312,17 @@ export async function replaceSegments(
       if (unchanged && current) {
         await db().run(
           `UPDATE rendition_segments
-           SET section_id = ?, section_ordinal = ?, title = ?, updated_at = ?
+           SET section_id = ?, section_ordinal = ?, title = ?,
+               timings_json = COALESCE(?, timings_json), updated_at = ?
            WHERE id = ?`,
-          [segment.sectionId, segment.sectionOrdinal, segment.title, now, current.id],
+          [
+            segment.sectionId,
+            segment.sectionOrdinal,
+            segment.title,
+            segment.timingsJson ?? null,
+            now,
+            current.id,
+          ],
         );
         continue;
       }
@@ -322,7 +332,7 @@ export async function replaceSegments(
           `UPDATE rendition_segments
            SET section_id = ?, section_ordinal = ?, title = ?, text = ?, speech_key = ?,
                file_path = NULL, format = NULL, duration_ms = NULL, bytes = NULL,
-               start_ms = 0, status = 'queued', error = NULL, updated_at = ?
+               start_ms = 0, timings_json = ?, status = 'queued', error = NULL, updated_at = ?
            WHERE id = ?`,
           [
             segment.sectionId,
@@ -330,6 +340,7 @@ export async function replaceSegments(
             segment.title,
             segment.text,
             segment.speechKey,
+            segment.timingsJson ?? null,
             now,
             current.id,
           ],
@@ -338,8 +349,9 @@ export async function replaceSegments(
         await db().run(
           `INSERT INTO rendition_segments
              (id, rendition_id, ordinal, section_id, section_ordinal, title, text, speech_key,
-              file_path, format, duration_ms, bytes, start_ms, status, error, created_at, updated_at)
-           VALUES (?,?,?,?,?,?,?,?, NULL, NULL, NULL, NULL, 0, 'queued', NULL, ?, ?)`,
+              file_path, format, duration_ms, bytes, start_ms, timings_json, status, error,
+              created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?, NULL, NULL, NULL, NULL, 0, ?, 'queued', NULL, ?, ?)`,
           [
             newId('rs'),
             renditionId,
@@ -349,6 +361,7 @@ export async function replaceSegments(
             segment.title,
             segment.text,
             segment.speechKey,
+            segment.timingsJson ?? null,
             now,
             now,
           ],
@@ -371,7 +384,7 @@ export async function updateSegment(
   patch: Partial<
     Pick<
       RenditionSegment,
-      'speechKey' | 'filePath' | 'format' | 'durationMs' | 'bytes' | 'status' | 'error'
+      'speechKey' | 'filePath' | 'format' | 'durationMs' | 'bytes' | 'timingsJson' | 'status' | 'error'
     >
   >,
 ): Promise<void> {
@@ -396,6 +409,10 @@ export async function updateSegment(
   if (patch.bytes !== undefined) {
     fields.push('bytes = ?');
     params.push(patch.bytes);
+  }
+  if (patch.timingsJson !== undefined) {
+    fields.push('timings_json = ?');
+    params.push(patch.timingsJson);
   }
   if (patch.status !== undefined) {
     fields.push('status = ?');

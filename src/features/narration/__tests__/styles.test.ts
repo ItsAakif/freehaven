@@ -40,6 +40,21 @@ describe('narration styles', () => {
     expect(new Set(directives).size).toBe(7);
   });
 
+  it('uses the expressive Kokoro defaults per style', () => {
+    const expected: Record<string, number> = {
+      brief: 2,
+      chronicle: 16,
+      plain: 9,
+      mechanism: 16,
+      debate: 17,
+      backstage: 6,
+      fireside: 3,
+    };
+    for (const style of NARRATION_STYLES) {
+      expect(style.kokoroSpeakerId).toBe(expected[style.id]);
+    }
+  });
+
   it('coerces every legacy id', () => {
     expect(coerceNarrationStyle('calm')).toBe('fireside');
     expect(coerceNarrationStyle('conversational')).toBe('fireside');

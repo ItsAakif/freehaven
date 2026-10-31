@@ -71,6 +71,7 @@ class FakeEngine implements NarrationEngine {
   calls = 0;
   failOnCall: number | null = null;
   abortedSignal: AbortSignal | null = null;
+  timings?: { text: string; startMs: number; endMs: number }[];
 
   constructor(readonly id: NarrationEngine['id'] = 'remote') {}
 
@@ -94,6 +95,7 @@ class FakeEngine implements NarrationEngine {
       bytes: request.text.length,
       cached: false,
       format: request.format,
+      ...(this.timings ? { timings: this.timings } : {}),
     };
   }
 }
@@ -256,6 +258,36 @@ describe('narration generation', () => {
       expect(segments[index].startMs).toBe(expected);
     }
     expect((await getRendition(rendition.id))?.durationMs).toBeGreaterThan(0);
+  });
+
+  it('persists engine word timings as segment json', async () => {
+    const rendition = await getOrCreateRendition({
+      bookId: BOOK_ID,
+      language: 'en-US',
+      styleId: 'brief',
+      length: '5',
+    });
+    await setRenditionEngine(rendition.id, {
+      engine: 'remote',
+      voice: 'onyx',
+      model: 'tts-1',
+      instruction: null,
+      instructionHash: null,
+    });
+    await createScript({ renditionId: rendition.id });
+
+    const engine = new FakeEngine('remote');
+    engine.timings = [
+      { text: 'first', startMs: 0, endMs: 250 },
+      { text: 'second', startMs: 300, endMs: 700 },
+    ];
+    await synthesiseRendition({ renditionId: rendition.id, engine });
+
+    const segments = await listSegments(rendition.id);
+    expect(segments.length).toBeGreaterThan(0);
+    for (const segment of segments) {
+      expect(JSON.parse(segment.timingsJson ?? 'null')).toEqual(engine.timings);
+    }
   });
 
   it('leaves earlier segments ready when synthesis fails mid-way', async () => {

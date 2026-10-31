@@ -1,4 +1,4 @@
-import { encodeWav } from '@/features/narration/wav';
+import { encodeWav, normalisePeak } from '@/features/narration/wav';
 
 function ascii(bytes: Uint8Array, start: number, length: number): string {
   return String.fromCharCode(...bytes.slice(start, start + length));
@@ -36,5 +36,18 @@ describe('WAV encoder', () => {
     const bytes = encodeWav(new Float32Array(0), 24_000);
     expect(bytes.length).toBe(44);
     expect(uint32(bytes, 40)).toBe(0);
+  });
+
+  it('normalises the peak to the target without mutating the input', () => {
+    const input = new Float32Array([0, 0.25, -0.5]);
+    const output = normalisePeak(input, 0.95);
+    expect(Math.max(...Array.from(output, Math.abs))).toBeCloseTo(0.95, 6);
+    expect(Array.from(input)).toEqual([0, 0.25, -0.5]);
+    expect(output).not.toBe(input);
+  });
+
+  it('leaves silence and empty input untouched', () => {
+    expect(Array.from(normalisePeak(new Float32Array([0, 0, 0])))).toEqual([0, 0, 0]);
+    expect(normalisePeak(new Float32Array(0))).toHaveLength(0);
   });
 });

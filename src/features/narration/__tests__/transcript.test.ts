@@ -1,9 +1,12 @@
 import {
+  parseSpeechTimings,
   segmentProgress,
+  timingIndexForElapsed,
   tokenizeTranscript,
   transcriptWordCount,
   wordIndexForProgress,
 } from '@/features/narration/transcript';
+import type { SpeechTiming } from '@/domain/narration';
 
 describe('word-synced transcript', () => {
   it('starts on the first word', () => {
@@ -43,5 +46,31 @@ describe('word-synced transcript', () => {
     expect(segmentProgress(500, 1_000, 2_000, 'abc', estimate)).toBe(0);
     expect(segmentProgress(1_000, 1_000, null, 'abcd', estimate)).toBe(0);
     expect(segmentProgress(1_300, 1_000, null, 'abc', estimate)).toBe(1);
+  });
+
+  const timings: SpeechTiming[] = [
+    { text: 'one', startMs: 0, endMs: 400 },
+    { text: 'two', startMs: 450, endMs: 900 },
+    { text: 'three', startMs: 950, endMs: 1400 },
+  ];
+
+  it('selects the active timing before, between and after words', () => {
+    expect(timingIndexForElapsed(timings, -50)).toBe(0);
+    expect(timingIndexForElapsed(timings, 0)).toBe(0);
+    expect(timingIndexForElapsed(timings, 425)).toBe(0);
+    expect(timingIndexForElapsed(timings, 450)).toBe(1);
+    expect(timingIndexForElapsed(timings, 1_500)).toBe(2);
+    expect(timingIndexForElapsed([], 500)).toBe(-1);
+  });
+
+  it('parses stored timings and rejects garbage', () => {
+    expect(parseSpeechTimings(JSON.stringify(timings))).toEqual(timings);
+    expect(parseSpeechTimings(null)).toEqual([]);
+    expect(parseSpeechTimings('')).toEqual([]);
+    expect(parseSpeechTimings('not json')).toEqual([]);
+    expect(parseSpeechTimings('{"text":"one"}')).toEqual([]);
+    expect(
+      parseSpeechTimings('[{"text":"one","startMs":0,"endMs":1},{"text":42}]'),
+    ).toEqual([{ text: 'one', startMs: 0, endMs: 1 }]);
   });
 });

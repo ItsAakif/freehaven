@@ -40,6 +40,7 @@ import {
   getNarrationStyle,
 } from '@/features/narration/styles';
 import { LENGTH_PRESETS } from '@/features/narration/lengths';
+import { kokoroVoiceName } from '@/features/narration/kokoroVoices';
 import { MAX_INSTRUCTION_CHARS } from '@/features/narration/script';
 import {
   invalidateNarrationProbes,
@@ -968,7 +969,7 @@ export default function SettingsScreen() {
                 }
               />
               <AppText variant="bodySm" style={{ fontWeight: '600' }}>
-                {kokoroSpeaker}
+                {kokoroSpeaker} · {kokoroVoiceName(kokoroSpeaker)}
               </AppText>
               <Button
                 label="+"
@@ -992,6 +993,9 @@ export default function SettingsScreen() {
                 />
               ) : null}
             </View>
+            <AppText variant="caption" faint>
+              Kokoro has no emotion instructions; the style changes the script, the voice changes the delivery.
+            </AppText>
             <AppText variant="caption" faint>
               {kokoroBundle && records.get(kokoroBundle.id)?.status === 'ready'
                 ? `Speaker ${kokoroSpeaker} of ${kokoroSpeakers}.`

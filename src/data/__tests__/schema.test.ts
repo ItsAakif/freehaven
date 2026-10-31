@@ -3,16 +3,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { migrate } from '@/data/db';
-import { MIGRATION_1, MIGRATION_5, MIGRATION_6, MIGRATIONS } from '@/data/schema';
+import { MIGRATION_1, MIGRATION_5, MIGRATION_6, MIGRATION_7, MIGRATIONS } from '@/data/schema';
 import { createTestDriver } from '@/data/__tests__/testDriver';
 
 describe('schema and migrations', () => {
   it('creates the full schema and records the version', async () => {
     const driver = createTestDriver();
     const version = await migrate(driver);
-    expect(version).toBe(6);
+    expect(version).toBe(7);
     const pragma = await driver.first<{ user_version: number }>('PRAGMA user_version');
-    expect(pragma?.user_version).toBe(6);
+    expect(pragma?.user_version).toBe(7);
 
     const tables = await driver.all<{ name: string }>(
       "SELECT name FROM sqlite_master WHERE type IN ('table','view') ORDER BY name",
@@ -133,7 +133,7 @@ describe('schema and migrations', () => {
        VALUES ('q','b','s1',0,'ready','/tmp/a.mp3',0,0)`,
     );
 
-    expect(await migrate(driver)).toBe(6);
+    expect(await migrate(driver)).toBe(7);
     const rows = await driver.all<{ id: string; file_path: string }>('SELECT * FROM audio_queue');
     expect(rows).toHaveLength(1);
     expect(rows[0].file_path).toBe('/tmp/a.mp3');
@@ -227,7 +227,7 @@ describe('schema and migrations', () => {
     const driver = createTestDriver();
     await migrate(driver);
     expect(await driver.first<{ user_version: number }>('PRAGMA user_version')).toMatchObject({
-      user_version: 6,
+      user_version: 7,
     });
     const tables = await driver.all<{ name: string }>(
       "SELECT name FROM sqlite_master WHERE type = 'table'",
@@ -270,7 +270,7 @@ describe('schema and migrations', () => {
        VALUES ('legacy','import','{}','queued',0,1,2)`,
     );
 
-    expect(await migrate(driver)).toBe(6);
+    expect(await migrate(driver)).toBe(7);
     const row = await driver.first<{
       id: string;
       type: string;
@@ -347,6 +347,60 @@ describe('schema and migrations', () => {
   it('keeps migration 6 additive', () => {
     // Comments mention "no column drop"; only the executable SQL is checked.
     const sql = MIGRATION_6.replace(/--[^\n]*/g, '').toUpperCase();
+    expect(sql).not.toMatch(/\bDROP\b/);
+    expect(sql).not.toMatch(/ALTER\s+TABLE\s+\w+\s+RENAME/);
+  });
+
+  it('creates a fresh v7 database with timings_json on rendition_segments', async () => {
+    const driver = createTestDriver();
+    expect(await migrate(driver)).toBe(7);
+    const columns = (
+      await driver.all<{ name: string }>('PRAGMA table_info(rendition_segments)')
+    ).map((column) => column.name);
+    expect(columns).toContain('timings_json');
+    await driver.close();
+  });
+
+  it('upgrades a v6 segment to v7 in place and preserves old data', async () => {
+    const driver = createTestDriver();
+    await driver.exec(MIGRATION_1);
+    for (const migration of MIGRATIONS.filter(
+      (candidate) => candidate.version > 1 && candidate.version <= 6,
+    )) {
+      await driver.exec(migration.sql);
+    }
+    await driver.exec('PRAGMA user_version = 6');
+    await driver.run(
+      "INSERT INTO books (id, title, source, access, created_at, updated_at) VALUES ('b','Book','import','user_import',0,0)",
+    );
+    await driver.run(
+      `INSERT INTO renditions (id, book_id, language, style_id, length_preset, created_at, updated_at)
+       VALUES ('r','b','en','fireside','15',0,0)`,
+    );
+    await driver.run(
+      `INSERT INTO rendition_segments
+         (id, rendition_id, ordinal, text, file_path, duration_ms, created_at, updated_at)
+       VALUES ('s','r',0,'hello','/audio/0.wav',1234,0,0)`,
+    );
+
+    expect(await migrate(driver)).toBe(7);
+    const row = await driver.first<{
+      text: string;
+      file_path: string;
+      duration_ms: number;
+      timings_json: string | null;
+    }>('SELECT * FROM rendition_segments WHERE id = ?', ['s']);
+    expect(row).toMatchObject({
+      text: 'hello',
+      file_path: '/audio/0.wav',
+      duration_ms: 1234,
+      timings_json: null,
+    });
+    await driver.close();
+  });
+
+  it('keeps migration 7 additive', () => {
+    const sql = MIGRATION_7.replace(/--[^\n]*/g, '').toUpperCase();
     expect(sql).not.toMatch(/\bDROP\b/);
     expect(sql).not.toMatch(/ALTER\s+TABLE\s+\w+\s+RENAME/);
   });

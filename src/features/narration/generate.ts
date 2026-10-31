@@ -349,6 +349,7 @@ export async function synthesiseRendition(input: {
           format: asset.format,
           durationMs: estimatedDurationMs(segment.text),
           bytes: asset.bytes,
+          timingsJson: asset.timings?.length ? JSON.stringify(asset.timings) : null,
           speechKey,
           error: null,
         });

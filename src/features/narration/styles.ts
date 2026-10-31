@@ -58,7 +58,7 @@ export const NARRATION_STYLES: readonly NarrationStylePreset[] = [
     defaultLength: '5',
     fillerBudget: 0.05,
     defaultVoices: { device: null, remote: 'onyx', piper: 'default', kokoro: 'default' },
-    kokoroSpeakerId: 3,
+    kokoroSpeakerId: 2,
   },
   {
     id: 'chronicle',
@@ -73,7 +73,7 @@ export const NARRATION_STYLES: readonly NarrationStylePreset[] = [
     defaultLength: '15',
     fillerBudget: 0.2,
     defaultVoices: { device: null, remote: 'fable', piper: 'default', kokoro: 'default' },
-    kokoroSpeakerId: 0,
+    kokoroSpeakerId: 16,
   },
   {
     id: 'plain',
@@ -88,7 +88,7 @@ export const NARRATION_STYLES: readonly NarrationStylePreset[] = [
     defaultLength: '5',
     fillerBudget: 0.2,
     defaultVoices: { device: null, remote: 'nova', piper: 'default', kokoro: 'default' },
-    kokoroSpeakerId: 1,
+    kokoroSpeakerId: 9,
   },
   {
     id: 'mechanism',
@@ -103,7 +103,7 @@ export const NARRATION_STYLES: readonly NarrationStylePreset[] = [
     defaultLength: '15',
     fillerBudget: 0.1,
     defaultVoices: { device: null, remote: 'echo', piper: 'default', kokoro: 'default' },
-    kokoroSpeakerId: 2,
+    kokoroSpeakerId: 16,
   },
   {
     id: 'debate',
@@ -118,7 +118,7 @@ export const NARRATION_STYLES: readonly NarrationStylePreset[] = [
     defaultLength: '15',
     fillerBudget: 0.15,
     defaultVoices: { device: null, remote: 'alloy', piper: 'default', kokoro: 'default' },
-    kokoroSpeakerId: 4,
+    kokoroSpeakerId: 17,
   },
   {
     id: 'backstage',
@@ -133,7 +133,7 @@ export const NARRATION_STYLES: readonly NarrationStylePreset[] = [
     defaultLength: '15',
     fillerBudget: 0.15,
     defaultVoices: { device: null, remote: 'shimmer', piper: 'default', kokoro: 'default' },
-    kokoroSpeakerId: 5,
+    kokoroSpeakerId: 6,
   },
   {
     id: 'fireside',
@@ -149,7 +149,7 @@ export const NARRATION_STYLES: readonly NarrationStylePreset[] = [
     defaultLength: '15',
     fillerBudget: 0.2,
     defaultVoices: { device: null, remote: 'nova', piper: 'default', kokoro: 'default' },
-    kokoroSpeakerId: 6,
+    kokoroSpeakerId: 3,
   },
 ] as const;
 

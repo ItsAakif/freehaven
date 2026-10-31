@@ -30,6 +30,13 @@ export type RenditionStatus =
 
 export type SegmentStatus = 'queued' | 'ready' | 'failed';
 
+/** Word-level timing inside one synthesized segment. Offsets are milliseconds. */
+export type SpeechTiming = {
+  text: string;
+  startMs: number;
+  endMs: number;
+};
+
 export interface Rendition {
   id: string;
   bookId: string;
@@ -66,6 +73,8 @@ export interface RenditionSegment {
   durationMs: number | null;
   bytes: number | null;
   startMs: number;
+  /** JSON array of SpeechTiming when the engine reported word timings; null otherwise. */
+  timingsJson: string | null;
   status: SegmentStatus;
   error: string | null;
   createdAt: number;
@@ -98,4 +107,6 @@ export interface QueuedSegment {
   title: string | null;
   text: string;
   speechKey: string;
+  /** Optional precomputed word timings (JSON). Preserved when supplied. */
+  timingsJson?: string | null;
 }

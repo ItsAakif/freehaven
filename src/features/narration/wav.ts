@@ -6,6 +6,31 @@
  */
 
 const HEADER_BYTES = 44;
+const DEFAULT_PEAK = 0.95;
+
+/**
+ * Scale samples so the loudest absolute value equals `target` (default 0.95).
+ * Pure: the input array is never mutated. Silence and empty input return a copy
+ * unchanged so callers can encode immediately.
+ */
+export function normalisePeak(
+  samples: Float32Array,
+  target = DEFAULT_PEAK,
+): Float32Array {
+  const out = new Float32Array(samples);
+  if (!samples.length) return out;
+  let peak = 0;
+  for (let i = 0; i < samples.length; i += 1) {
+    const magnitude = Math.abs(samples[i]);
+    if (magnitude > peak) peak = magnitude;
+  }
+  if (!Number.isFinite(peak) || peak <= 0) return out;
+  const safeTarget = Number.isFinite(target) ? Math.min(1, Math.max(0, target)) : DEFAULT_PEAK;
+  if (safeTarget <= 0) return out;
+  const gain = safeTarget / peak;
+  for (let i = 0; i < out.length; i += 1) out[i] *= gain;
+  return out;
+}
 
 export function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array {
   const rate = Number.isFinite(sampleRate) && sampleRate > 0 ? Math.round(sampleRate) : 24_000;

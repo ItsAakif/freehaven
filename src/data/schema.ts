@@ -7,7 +7,7 @@
  * filesystem and are referenced by path.
  */
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export const MIGRATION_1 = `
 PRAGMA foreign_keys = ON;
@@ -324,6 +324,13 @@ CREATE INDEX IF NOT EXISTS idx_job_units_status
   ON job_units (status, updated_at);
 `;
 
+export const MIGRATION_7 = `
+-- Migration 7: exact word timings from engines that expose them.
+-- Additive only. Existing segments keep NULL and fall back to estimated progress.
+
+ALTER TABLE rendition_segments ADD COLUMN timings_json TEXT;
+`;
+
 export type Migration = { version: number; sql: string };
 
 export const MIGRATION_2 = `
@@ -471,4 +478,5 @@ export const MIGRATIONS: Migration[] = [
   { version: 4, sql: MIGRATION_4 },
   { version: 5, sql: MIGRATION_5 },
   { version: 6, sql: MIGRATION_6 },
+  { version: 7, sql: MIGRATION_7 },
 ];

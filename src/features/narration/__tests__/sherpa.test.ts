@@ -79,6 +79,67 @@ describe('sherpa adapter', () => {
     expect(String.fromCharCode(...writes[0].bytes.slice(0, 4))).toBe('RIFF');
   });
 
+  it('prefers generateSpeechWithTimestamps and maps word timings to milliseconds', async () => {
+    const calls: { text: string; options?: Record<string, unknown> }[] = [];
+    const writes: { path: string; bytes: Uint8Array }[] = [];
+    const handle: SherpaHandle = {
+      generateSpeechWithTimestamps: (text, options) => {
+        calls.push({ text, options: options as Record<string, unknown> });
+        return {
+          samples: [0, 0.2, -0.2],
+          sampleRate: 24_000,
+          subtitles: [
+            { text: 'hello', start: 0, end: 0.5 },
+            { text: 'world', start: 0.6, end: 1.25 },
+          ],
+        };
+      },
+      generateSpeech: () => {
+        throw new Error('the timestamp path should win');
+      },
+    };
+
+    const engine = createSherpaEngine({
+      engine: 'kokoro',
+      modelDir: 'models/kokoro',
+      modelType: 'kokoro',
+      handle,
+      writeFile: async (path, bytes) => {
+        writes.push({ path, bytes });
+      },
+    });
+
+    const asset = await engine.synthesize(
+      speechRequest({
+        engine: 'kokoro',
+        speakerId: 7,
+        speed: 1.1,
+        destPath: 'renditions/rd/0.wav',
+      }),
+    );
+
+    expect(calls[0]).toEqual({
+      text: 'hello',
+      options: {
+        sid: 7,
+        speed: 1.1,
+        subtitles: { mode: 'fast', granularity: 'word' },
+      },
+    });
+    expect(asset.timings).toEqual([
+      { text: 'hello', startMs: 0, endMs: 500 },
+      { text: 'world', startMs: 600, endMs: 1250 },
+    ]);
+    expect(writes).toHaveLength(1);
+    const view = new DataView(
+      writes[0].bytes.buffer,
+      writes[0].bytes.byteOffset,
+      writes[0].bytes.byteLength,
+    );
+    const decoded = [0, 1, 2].map((index) => Math.abs(view.getInt16(44 + index * 2, true)));
+    expect(Math.max(...decoded)).toBeGreaterThan(30_000);
+  });
+
   it('creates one local handle per engine and reuses it', async () => {
     let creations = 0;
     const destroyed: string[] = [];

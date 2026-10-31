@@ -42,7 +42,7 @@ import {
 import { NARRATION_STYLES, getNarrationStyle } from '@/features/narration/styles';
 import { LENGTH_PRESETS } from '@/features/narration/lengths';
 import { computeOffsets, estimatedDurationMs, locateInSegments, sectionMarkers } from '@/features/narration/manifest';
-import { tokenizeTranscript, wordIndexForProgress } from '@/features/narration/transcript';
+import { tokenizeTranscript, wordIndexForProgress, parseSpeechTimings, timingIndexForElapsed } from '@/features/narration/transcript';
 import { maxCharsForEngine, planSpeechSegments } from '@/features/narration/segments';
 import {
   probeNarrationEngines,
@@ -793,31 +793,43 @@ export default function ListenScreen() {
     Math.min(segmentDurationMs, absolutePosition - segmentStartMs),
   );
   const wordProgress = segmentDurationMs > 0 ? segmentElapsedMs / segmentDurationMs : 0;
-  const activeWordIndex = wordIndexForProgress(currentSegment?.text ?? '', wordProgress);
+  const timingTokens = parseSpeechTimings(currentSegment?.timingsJson);
+  const timingActiveIndex = timingTokens.length
+    ? timingIndexForElapsed(timingTokens, Math.max(0, absolutePosition - segmentStartMs))
+    : -1;
+  const activeWordIndex = timingTokens.length
+    ? -1
+    : wordIndexForProgress(currentSegment?.text ?? '', wordProgress);
   const transcriptTokens = tokenizeTranscript(currentSegment?.text ?? '');
+  const activeWordStyle = {
+    color: palette.accent,
+    backgroundColor: palette.accentSoft,
+    fontWeight: '700',
+  } as const;
   let wordCursor = 0;
-  const transcriptSpans = transcriptTokens.map((token, tokenIndex) => {
-    if (!token.word) return <Text key={`t${tokenIndex}`}>{token.text}</Text>;
-    const wordIndex = wordCursor;
-    wordCursor += 1;
-    const active = wordIndex === activeWordIndex;
-    return (
-      <Text
-        key={`t${tokenIndex}`}
-        style={
-          active
-            ? {
-                color: palette.accent,
-                backgroundColor: palette.accentSoft,
-                fontWeight: '700',
-              }
-            : undefined
-        }
-      >
-        {token.text}
-      </Text>
-    );
-  });
+  const transcriptSpans = timingTokens.length
+    ? timingTokens.map((timing, timingIndex) => (
+        <React.Fragment key={`tm${timingIndex}`}>
+          <Text style={timingIndex === timingActiveIndex ? activeWordStyle : undefined}>
+            {timing.text}
+          </Text>
+          {timingIndex < timingTokens.length - 1 ? <Text> </Text> : null}
+        </React.Fragment>
+      ))
+    : transcriptTokens.map((token, tokenIndex) => {
+        if (!token.word) return <Text key={`t${tokenIndex}`}>{token.text}</Text>;
+        const wordIndex = wordCursor;
+        wordCursor += 1;
+        const active = wordIndex === activeWordIndex;
+        return (
+          <Text
+            key={`t${tokenIndex}`}
+            style={active ? activeWordStyle : undefined}
+          >
+            {token.text}
+          </Text>
+        );
+      });
   const overall = totalMs > 0 ? Math.min(1, absolutePosition / totalMs) : 0;
   const currentSectionTitle = sectionTitleForSegment(segments, index);
   const currentTitle =
@@ -837,22 +849,22 @@ export default function ListenScreen() {
         right={<IconButton name="moon-outline" label="Sleep timer" onPress={() => setSleepOpen(true)} />}
       />
 
-      <View style={{ flex: 1, justifyContent: 'center', gap: space.lg }}>
-        <View style={{ alignItems: 'center', gap: space.md }}>
+      <View style={{ flex: 1, justifyContent: 'flex-start', gap: space.md, paddingTop: space.sm }}>
+        <View style={{ alignItems: 'center', gap: space.sm }}>
           {book.coverUrl ? (
             <Cover
               uri={book.coverUrl}
               title={book.title}
-              width={132}
-              height={190}
-              style={{ borderRadius: radius.lg }}
+              width={88}
+              height={120}
+              style={{ borderRadius: radius.md }}
             />
           ) : (
             <View
               style={{
-                width: 132,
-                height: 190,
-                borderRadius: radius.lg,
+                width: 88,
+                height: 88,
+                borderRadius: radius.md,
                 backgroundColor: palette.surface,
                 borderWidth: 1,
                 borderColor: palette.line,
@@ -860,7 +872,7 @@ export default function ListenScreen() {
                 justifyContent: 'center',
               }}
             >
-              <BrandMark size={72} />
+              <BrandMark size={52} />
             </View>
           )}
           <AppText variant="title" serif style={{ textAlign: 'center' }}>
@@ -998,7 +1010,7 @@ export default function ListenScreen() {
           <>
             <Card style={{ backgroundColor: palette.surfaceAlt, borderColor: palette.line }}>
               <ScrollView style={{ maxHeight: 180 }} showsVerticalScrollIndicator={false}>
-                {transcriptTokens.length ? (
+                {transcriptTokens.length || timingTokens.length ? (
                   <AppText variant="bodySm" serif muted>
                     {transcriptSpans}
                   </AppText>

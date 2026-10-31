@@ -11,6 +11,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { getPreset } from '@/ai/presets';
 import { speechCacheKey } from '@/features/narration/cacheKey';
 import type { SpeechFormat, SpeechRequest } from '@/features/narration/cacheKey';
+import type { SpeechTiming } from '@/domain/narration';
 
 export { speechCacheKey };
 export type { SpeechFormat, SpeechRequest };
@@ -33,6 +34,8 @@ export type SpeechAsset = {
   bytes: number;
   cached: boolean;
   format: SpeechFormat;
+  /** Word-level timings from the engine, when it reports them. */
+  timings?: SpeechTiming[];
 };
 
 export interface SpeechCache {

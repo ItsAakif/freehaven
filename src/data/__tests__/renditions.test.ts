@@ -140,6 +140,31 @@ describe('renditions repository', () => {
     expect(await listSegments(rendition.id)).toEqual([]);
   });
 
+  it('stores word timings json and preserves them while a segment is unchanged', async () => {
+    await upsertCatalogueBook(book('b1'));
+    const rendition = await getOrCreateRendition({
+      bookId: 'b1',
+      language: 'en',
+      styleId: 'plain',
+      length: '5',
+    });
+    const timings = JSON.stringify([{ text: 'one', startMs: 0, endMs: 400 }]);
+    const [created] = await replaceSegments(rendition.id, [
+      { ...segment('one', 'k1'), timingsJson: timings },
+    ]);
+    expect(created.timingsJson).toBe(timings);
+
+    const updated = JSON.stringify([{ text: 'one', startMs: 0, endMs: 500 }]);
+    await updateSegment(created.id, { timingsJson: updated });
+    expect((await listSegments(rendition.id))[0].timingsJson).toBe(updated);
+
+    const unchanged = await replaceSegments(rendition.id, [segment('one', 'k1')]);
+    expect(unchanged[0].timingsJson).toBe(updated);
+
+    const changed = await replaceSegments(rendition.id, [segment('one changed', 'k2')]);
+    expect(changed[0].timingsJson).toBeNull();
+  });
+
   it('updates scripts, engines and reports stats', async () => {
     await upsertCatalogueBook(book('b1'));
     const rendition = await getOrCreateRendition({

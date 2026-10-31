@@ -14,8 +14,9 @@
  */
 
 import type { SpeechAsset, SpeechRequest } from '@/features/audio/providers';
+import type { SpeechTiming } from '@/domain/narration';
 import type { EngineAvailability, NarrationEngine } from './engines';
-import { encodeWav } from './wav';
+import { encodeWav, normalisePeak } from './wav';
 
 export type SherpaModelPath = {
   type: 'file' | 'asset' | 'auto';
@@ -27,8 +28,27 @@ export interface SherpaGeneratedAudio {
   sampleRate: number;
 }
 
+/** Word/subtitle timing in seconds, as the native module reports it. */
+export interface SherpaSubtitle {
+  text: string;
+  start: number;
+  end: number;
+}
+
+export interface SherpaTimedAudio extends SherpaGeneratedAudio {
+  subtitles?: SherpaSubtitle[];
+}
+
 /** Minimal TTS handle shape; the real package also exposes getNumSpeakers(). */
 export interface SherpaHandle {
+  generateSpeechWithTimestamps?(
+    text: string,
+    options?: {
+      sid?: number;
+      speed?: number;
+      subtitles?: { mode?: 'fast' | 'slow'; granularity?: 'word' | 'sentence' };
+    },
+  ): Promise<SherpaTimedAudio> | SherpaTimedAudio;
   generateSpeech?(
     text: string,
     options?: { sid?: number; speed?: number },
@@ -190,7 +210,14 @@ async function defaultWriteFile(path: string, bytes: Uint8Array): Promise<void> 
 async function synthesizeWithHandle(
   handle: SherpaHandle,
   input: { text: string; speakerId?: number; speed?: number },
-): Promise<SherpaGeneratedAudio> {
+): Promise<SherpaTimedAudio> {
+  if (typeof handle.generateSpeechWithTimestamps === 'function') {
+    return handle.generateSpeechWithTimestamps(input.text, {
+      sid: input.speakerId,
+      speed: input.speed ?? 1,
+      subtitles: { mode: 'fast', granularity: 'word' },
+    });
+  }
   if (typeof handle.generateSpeech === 'function') {
     return handle.generateSpeech(input.text, {
       sid: input.speakerId,
@@ -205,6 +232,22 @@ async function synthesizeWithHandle(
 
 function toFloat32(samples: number[] | Float32Array): Float32Array {
   return samples instanceof Float32Array ? samples : Float32Array.from(samples);
+}
+
+/** Seconds → milliseconds, dropping blank or inverted entries. */
+export function timingsFromSubtitles(
+  subtitles: SherpaSubtitle[] | undefined,
+): SpeechTiming[] | undefined {
+  if (!subtitles?.length) return undefined;
+  const timings = subtitles
+    .filter((item) => typeof item?.text === 'string' && item.text.trim().length > 0)
+    .map((item) => ({
+      text: item.text,
+      startMs: Math.max(0, Math.round(item.start * 1000)),
+      endMs: Math.max(0, Math.round(item.end * 1000)),
+    }))
+    .filter((item) => item.endMs >= item.startMs);
+  return timings.length ? timings : undefined;
 }
 
 type EngineWithHandleOptions = {
@@ -237,8 +280,10 @@ function engineWithHandle(
         speakerId: options.speakerId ?? request.speakerId,
         speed: request.speed ?? 1,
       });
-      const bytes = encodeWav(toFloat32(result.samples), result.sampleRate);
+      const samples = normalisePeak(toFloat32(result.samples), 0.95);
+      const bytes = encodeWav(samples, result.sampleRate);
       const destPath = request.destPath;
+      const timings = timingsFromSubtitles(result.subtitles);
 
       if (destPath) await writeFile(destPath, bytes);
 
@@ -247,6 +292,7 @@ function engineWithHandle(
         bytes: bytes.byteLength,
         cached: false,
         format: 'wav',
+        ...(timings ? { timings } : {}),
       };
     },
   };

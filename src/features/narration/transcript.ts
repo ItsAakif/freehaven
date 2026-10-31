@@ -4,6 +4,8 @@
  * in the pure layer and every case is unit-testable.
  */
 
+import type { SpeechTiming } from '@/domain/narration';
+
 export type TranscriptToken = {
   /** Whitespace or a word exactly as it appears in the segment text. */
   text: string;
@@ -48,4 +50,47 @@ export function segmentProgress(
   if (!Number.isFinite(duration) || duration <= 0) return 0;
   const elapsed = Math.max(0, positionMs - segmentStartMs);
   return Math.min(1, elapsed / duration);
+}
+
+function isSpeechTiming(value: unknown): value is SpeechTiming {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.text === 'string' &&
+    typeof candidate.startMs === 'number' &&
+    Number.isFinite(candidate.startMs) &&
+    typeof candidate.endMs === 'number' &&
+    Number.isFinite(candidate.endMs)
+  );
+}
+
+/** Parse a stored `timings_json` value; garbage or empty falls back to []. */
+export function parseSpeechTimings(value: string | null | undefined): SpeechTiming[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isSpeechTiming);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Index of the token being spoken at `elapsedMs` inside a segment.
+ *
+ * Before the first token the first word stays highlighted; a gap between tokens
+ * keeps the previous token active; after the last token the last stays active.
+ * Empty timings return -1 so callers can use the progress fallback.
+ */
+export function timingIndexForElapsed(
+  timings: SpeechTiming[],
+  elapsedMs: number,
+): number {
+  if (!timings.length) return -1;
+  const elapsed = Number.isFinite(elapsedMs) ? elapsedMs : 0;
+  for (let index = timings.length - 1; index >= 0; index -= 1) {
+    if (elapsed >= timings[index].startMs) return index;
+  }
+  return 0;
 }
