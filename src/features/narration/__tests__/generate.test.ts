@@ -208,6 +208,30 @@ describe('narration generation', () => {
     }
   });
 
+  it('marks the script provider when the summariser reports degraded', async () => {
+    class DegradedProvider extends FakeProvider {
+      async generate(request: AiRequest): Promise<AiResponse> {
+        const response = await super.generate(request);
+        return { ...response, degraded: true };
+      }
+    }
+    providerRef.current = new DegradedProvider();
+
+    const rendition = await getOrCreateRendition({
+      bookId: BOOK_ID,
+      language: 'en-US',
+      styleId: 'brief',
+      length: '5',
+    });
+    const result = await createScript({ renditionId: rendition.id });
+    expect(result.degraded).toBe(true);
+
+    const stored = await getRendition(rendition.id);
+    expect(stored?.scriptProvider).toBe('fake+extract');
+    expect(stored?.scriptMd).not.toMatch(/Remote model unavailable/i);
+    expect(stored?.scriptMd).not.toMatch(/on-device extract/i);
+  });
+
   it('marks device-engine segments ready without files', async () => {
     const rendition = await getOrCreateRendition({
       bookId: BOOK_ID,

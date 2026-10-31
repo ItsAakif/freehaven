@@ -248,7 +248,7 @@ export async function createScript(input: {
 
     await updateRenditionScript(rendition.id, {
       scriptMd: result.text,
-      provider: result.provider,
+      provider: result.degraded ? `${result.provider}+extract` : result.provider,
       model: result.model,
       wordCount: result.words,
       status: 'script_ready',

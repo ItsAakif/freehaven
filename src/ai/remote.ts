@@ -228,6 +228,20 @@ function schemaForTask(task: AiRequest['task']): { schema: JsonSchema; name: str
 
 const STRATEGIES: readonly ResponseStrategy[] = ['json_schema', 'json_object', 'prompt_only'];
 
+/**
+ * Generation tasks keep the extractive text clean: the degradation note is a
+ * transport detail and must never be stored in a guide/script. Chat tasks keep
+ * it so the user can see why the remote model did not answer.
+ */
+const GENERATION_TASKS: readonly AiRequest['task'][] = [
+  'summary',
+  'takeaways',
+  'lesson',
+  'notes',
+  'outline',
+  'script',
+];
+
 function asStrategy(value: unknown): ResponseStrategy | null {
   return typeof value === 'string' && (STRATEGIES as readonly string[]).includes(value)
     ? (value as ResponseStrategy)
@@ -346,10 +360,11 @@ export class OpenAiCompatibleProvider implements AiProvider {
 
   private async degraded(request: AiRequest, error: Error): Promise<AiResponse> {
     const fallback = await extractiveProvider.generate(request);
+    const note = `_Remote model unavailable (${error.message}). Showing an on-device extract instead._`;
     return {
       ...fallback,
       degraded: true,
-      text: `${fallback.text}\n\n_Remote model unavailable (${error.message}). Showing an on-device extract instead._`,
+      text: GENERATION_TASKS.includes(request.task) ? fallback.text : `${fallback.text}\n\n${note}`,
     };
   }
 
@@ -371,6 +386,7 @@ export class OpenAiCompatibleProvider implements AiProvider {
     let totalHttpAttempts = 0;
     let downgrades = 0;
     let reasked = false;
+    let emptyRetried = false;
     let reaskMessages: ChatMessage[] | null = null;
     let reaskMaxTokens: number | undefined;
     let lastError: Error | null = null;
@@ -489,6 +505,26 @@ export class OpenAiCompatibleProvider implements AiProvider {
       }
       const { content, finishReason } = extractContent(payload);
       if (!content.trim()) {
+        // An empty response is usually a format/rung problem, not a dead
+        // endpoint. Make exactly one extra attempt: advance the ladder when a
+        // weaker rung exists, otherwise repeat the current (prompt_only) rung.
+        if (!emptyRetried) {
+          emptyRetried = true;
+          if (strategy !== 'prompt_only') {
+            const nextIndex = strategyIndex + 1;
+            if (nextIndex < strategies.length) {
+              strategyIndex = nextIndex;
+            } else {
+              const promptOnlyIndex = strategies.indexOf('prompt_only');
+              if (promptOnlyIndex !== -1) strategyIndex = promptOnlyIndex;
+            }
+          }
+          attemptsThisRung = 0;
+          reasked = false;
+          reaskMessages = null;
+          reaskMaxTokens = undefined;
+          continue;
+        }
         lastError = new AiUnavailableError('Model returned an empty response.');
         break;
       }

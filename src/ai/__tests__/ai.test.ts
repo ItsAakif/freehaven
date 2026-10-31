@@ -369,6 +369,45 @@ describe('remote provider', () => {
     expect(response.text).not.toBe('Invented claim.');
   });
 
+  it('degrades a summary without leaking the transport note into the text', async () => {
+    const fetchImpl = jest.fn(async () => {
+      throw new Error('offline');
+    });
+    const provider = new OpenAiCompatibleProvider({
+      baseUrl: 'https://example.test/v1',
+      model: 'test-model',
+      apiKey: 'secret',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    const response = await provider.generate({ task: 'summary', sources });
+    expect(response.degraded).toBe(true);
+    expect(response.provider).toBe('extractive');
+    expect(response.text).not.toMatch(/Remote model unavailable/);
+    expect(response.text).not.toMatch(/on-device extract/i);
+    expect(response.text.toLowerCase()).toContain('interest');
+  });
+
+  it('retries an empty model response once on the next strategy', async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValueOnce(chatResponse(''))
+      .mockResolvedValueOnce(chatResponse('Compound interest is interest on interest.'));
+    const provider = new OpenAiCompatibleProvider({
+      baseUrl: 'https://example.test/v1',
+      model: 'test-model',
+      apiKey: 'secret',
+      presetId: 'openai',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    const response = await provider.generate({ task: 'summary', sources });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(response.degraded).toBeFalsy();
+    expect(response.strategy).toBe('json_object');
+    expect(response.text).toContain('Compound interest');
+  });
+
   it('falls back on network failure and surfaces the reason', async () => {
     const fetchImpl = jest.fn(async () => {
       throw new Error('offline');

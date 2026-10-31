@@ -65,6 +65,7 @@ export default function GuideScreen() {
   const { rendition, book, segments } = state.data;
   const style = getNarrationStyle(rendition.styleId);
   const parsed = parseGuideScript(rendition.scriptMd ?? '');
+  const usedExtract = (rendition.scriptProvider ?? '').endsWith('+extract');
 
   if (!rendition.scriptMd?.trim()) {
     return (
@@ -184,6 +185,15 @@ export default function GuideScreen() {
             {style.persona}
           </AppText>
         )}
+
+        {usedExtract ? (
+          <Card style={{ backgroundColor: palette.accentSoft, borderColor: palette.line }}>
+            <AppText variant="bodySm" muted>
+              Part of this guide used an on-device extract because the model returned an empty
+              response. Re-generate for a full model summary.
+            </AppText>
+          </Card>
+        ) : null}
 
         {parsed.topics.map((topic, index) => (
           <View key={`${index}-${topic.title}`} style={{ gap: space.sm, marginTop: space.sm }}>
