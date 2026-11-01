@@ -54,8 +54,9 @@ describe('provider presets', () => {
       systemRole: true,
       openRouterRouting: false,
       contextChars: 24_000,
+      maxOutputTokens: 8_192,
     });
-    expect(preset.timeoutMs).toBe(60_000);
+    expect(preset.timeoutMs).toBe(90_000);
 
     const models = preset.suggestedModels ?? [];
     expect(models.map((model) => model.id)).toContain(preset.defaultModel);

@@ -57,7 +57,7 @@ export default function ChatScreen() {
 
   useEffect(() => {
     let active = true;
-    void getStoredKey()
+    void getStoredKey(aiPreset)
       .then((key) => {
         if (active) setKeyStored(!!key);
       })

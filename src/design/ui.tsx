@@ -18,7 +18,9 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
+import { BrandMark } from '@/design/brand';
 import { Icon, type IconName } from './icon';
+import { coverFallback, coverInitial } from './cover';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { layout, radius, space, type as typo } from './tokens';
 import { useTheme } from './theme';
@@ -412,6 +414,7 @@ export function Cover({
 }) {
   const { palette } = useTheme();
   const [failed, setFailed] = React.useState(false);
+  const fallback = coverFallback(width, height);
   return (
     <View
       style={[
@@ -438,9 +441,22 @@ export function Cover({
           accessibilityLabel={`Cover of ${title}`}
         />
       ) : (
-        <AppText variant="caption" muted style={{ paddingHorizontal: 6, textAlign: 'center' }} numberOfLines={3}>
-          {title}
-        </AppText>
+        <View accessible accessibilityLabel={title} style={{ alignItems: 'center', justifyContent: 'center' }}>
+          {fallback.kind === 'mark' ? (
+            <BrandMark size={fallback.size} />
+          ) : (
+            <AppText
+              serif
+              style={{
+                fontSize: fallback.fontSize,
+                lineHeight: Math.round(fallback.fontSize * 1.2),
+                color: palette.inkMuted,
+              }}
+            >
+              {coverInitial(title)}
+            </AppText>
+          )}
+        </View>
       )}
     </View>
   );

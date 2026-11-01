@@ -56,7 +56,8 @@ const LOCAL_CONTEXT = 12_000;
 const DEFAULT_MAX_OUTPUT = 2_048;
 const LARGE_MAX_OUTPUT = 4_096;
 const DEFAULT_TIMEOUT_MS = 45_000;
-const OPENCODE_TIMEOUT_MS = 60_000;
+const OPENCODE_TIMEOUT_MS = 90_000;
+const OPENCODE_MAX_OUTPUT = 8_192;
 
 /** Stable for the lifetime of the app process; the gateway recommends a per-conversation id. */
 const OPENCODE_SESSION_ID = `freehaven-${Math.random().toString(36).slice(2, 10)}`;
@@ -222,7 +223,7 @@ export const PRESETS: readonly ProviderPreset[] = [
       jsonSchema: false,
       jsonObject: true,
       contextChars: HOSTED_CONTEXT,
-      maxOutputTokens: DEFAULT_MAX_OUTPUT,
+      maxOutputTokens: OPENCODE_MAX_OUTPUT,
     }),
     timeoutMs: OPENCODE_TIMEOUT_MS,
     headers: {

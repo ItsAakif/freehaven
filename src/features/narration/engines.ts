@@ -123,20 +123,14 @@ async function defaultRemoteAvailability(): Promise<EngineAvailability> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { usePreferences } = require('@/state/preferences') as typeof import('@/state/preferences');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getStoredKey } = require('@/ai') as typeof import('@/ai');
     const prefs = usePreferences.getState();
     const baseUrl = (prefs.aiBaseUrl ?? '').trim();
     if (!baseUrl) return { available: false, reason: 'no_base_url' };
 
-    let hasKey = prefs.aiKeyPresent;
-    if (!hasKey) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { getStoredKey } = require('@/ai') as typeof import('@/ai');
-        hasKey = !!(await getStoredKey());
-      } catch {
-        hasKey = false;
-      }
-    }
+    // The active preset owns its key; the global flag cannot stand in for it.
+    const hasKey = !!(await getStoredKey(prefs.aiPreset));
 
     if (!hasKey && getPreset(prefs.aiPreset).requiresKey) {
       return { available: false, reason: 'no_key' };
@@ -156,7 +150,7 @@ async function defaultRemoteConfig(): Promise<RemoteEngineConfig | null> {
     const prefs = usePreferences.getState();
     const baseUrl = (prefs.aiBaseUrl ?? '').trim();
     if (!baseUrl) return null;
-    const apiKey = await getStoredKey();
+    const apiKey = await getStoredKey(prefs.aiPreset);
     if (!apiKey && getPreset(prefs.aiPreset).requiresKey) return null;
     return {
       baseUrl,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Switch, View } from 'react-native';
 import { router } from 'expo-router';
 import * as Notifications from 'expo-notifications';
@@ -250,15 +250,28 @@ export default function SettingsScreen() {
   );
 
   const usage = useAsync(async () => {
-    const [counts, storage, key, profile] = await Promise.all([
+    const [counts, storage, profile] = await Promise.all([
       dataCounts(),
       storageUsage(),
-      getStoredKey(),
       getProfile(),
     ]);
-    setKeyState(key ? 'present' : 'absent');
     return { counts, storage, profile };
   }, [tick]);
+
+  // Key state is per preset. Re-read it when the selected preset changes and
+  // when the sheet opens or closes, so a stale "saved" label never leaks from
+  // the previous provider. The field is a draft, so it is cleared here too.
+  useEffect(() => {
+    let active = true;
+    setKeyDraft('');
+    setKeyState('unknown');
+    void getStoredKey(preset.id).then((stored) => {
+      if (active) setKeyState(stored ? 'present' : 'absent');
+    });
+    return () => {
+      active = false;
+    };
+  }, [preset.id, aiOpen]);
 
   const engines = useAsync(async () => {
     const [probes, records] = await Promise.all([probeNarrationEngines(), listNarrationEngines()]);
@@ -269,9 +282,16 @@ export default function SettingsScreen() {
 
   const selectPreset = (id: string) => {
     const next = getPreset(id);
+    // Re-tapping the active chip must not blank its saved-key label: the sync
+    // effect only re-runs when the preset id actually changes.
+    const changed = next.id !== preset.id;
     prefs.setAiPreset(next.id);
     setBaseUrl(next.baseUrl);
     setModel(next.defaultModel);
+    if (changed) {
+      setKeyDraft('');
+      setKeyState('unknown');
+    }
     setAiError(null);
     setTestState({ kind: 'idle' });
   };
@@ -288,9 +308,9 @@ export default function SettingsScreen() {
       prefs.setAiPreset(preset.id);
       prefs.setAiBaseUrl(stripTrailingSlash(baseUrl));
       prefs.setAiModel(model.trim());
-      if (keyDraft.trim()) await setStoredKey(keyDraft.trim());
+      if (keyDraft.trim()) await setStoredKey(keyDraft.trim(), preset.id);
       setKeyDraft('');
-      setKeyState((await getStoredKey()) ? 'present' : 'absent');
+      setKeyState((await getStoredKey(preset.id)) ? 'present' : 'absent');
       setAiOpen(false);
     } catch (e) {
       setAiError((e as Error).message);
@@ -317,7 +337,7 @@ export default function SettingsScreen() {
     setTestState({ kind: 'idle' });
     const started = nowMs();
     try {
-      const savedKey = keyDraft.trim() ? keyDraft.trim() : (await getStoredKey()) ?? '';
+      const savedKey = keyDraft.trim() ? keyDraft.trim() : (await getStoredKey(preset.id)) ?? '';
       const provider = new OpenAiCompatibleProvider({
         baseUrl: stripTrailingSlash(baseUrl),
         model: model.trim() || preset.defaultModel,
@@ -1180,7 +1200,8 @@ export default function SettingsScreen() {
             full
             onPress={() =>
               void (async () => {
-                await clearStoredKey();
+                await clearStoredKey(preset.id);
+                setKeyDraft('');
                 setKeyState('absent');
               })()
             }

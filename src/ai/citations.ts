@@ -79,6 +79,23 @@ function asChunk(source: AiRequest['sources'][number]): Chunk {
   };
 }
 
+/**
+ * Fill in page/section from the matched source where the model left them out.
+ * A value the model supplied is never overwritten, and the chunk id stays the
+ * source id so the citation remains verifiable.
+ */
+function enrichFromSource(
+  citation: Citation,
+  source: AiRequest['sources'][number],
+): Citation {
+  return {
+    ...citation,
+    chunkId: source.chunkId,
+    page: citation.page ?? source.page ?? null,
+    sectionTitle: citation.sectionTitle ?? source.sectionTitle ?? null,
+  };
+}
+
 export function verifyCitations(
   citations: Citation[],
   sources: AiRequest['sources'],
@@ -101,7 +118,7 @@ export function verifyCitations(
       continue;
     }
     if (quoteMatchesChunk(citation.quote ?? '', source.text)) {
-      kept.push(citation);
+      kept.push(enrichFromSource(citation, source));
       continue;
     }
     if (!repair) {
@@ -113,7 +130,7 @@ export function verifyCitations(
       rejected += 1;
       continue;
     }
-    kept.push({ ...citation, quote: replacement });
+    kept.push(enrichFromSource({ ...citation, quote: replacement }, source));
     repaired += 1;
   }
 

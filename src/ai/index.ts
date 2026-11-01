@@ -1,34 +1,11 @@
-import * as SecureStore from 'expo-secure-store';
 import { usePreferences } from '@/state/preferences';
 import { extractiveProvider } from './extractive';
+import { getStoredKey } from './keys';
 import { getPreset } from './presets';
 import { OpenAiCompatibleProvider } from './remote';
 import type { AiProvider } from './types';
 
-const KEY = 'freehaven.ai.apiKey';
-
-export async function getStoredKey(): Promise<string | null> {
-  try {
-    return await SecureStore.getItemAsync(KEY);
-  } catch {
-    return null;
-  }
-}
-
-export async function setStoredKey(key: string): Promise<void> {
-  if (!key.trim()) {
-    await SecureStore.deleteItemAsync(KEY);
-    usePreferences.getState().setAiKeyPresent(false);
-    return;
-  }
-  await SecureStore.setItemAsync(KEY, key.trim());
-  usePreferences.getState().setAiKeyPresent(true);
-}
-
-export async function clearStoredKey(): Promise<void> {
-  await SecureStore.deleteItemAsync(KEY);
-  usePreferences.getState().setAiKeyPresent(false);
-}
+export { clearStoredKey, getStoredKey, setStoredKey } from './keys';
 
 /**
  * Resolve the configured provider, falling back to on-device extraction.
@@ -46,7 +23,7 @@ export async function resolveProvider(): Promise<AiProvider> {
   const model = (prefs.aiModel ?? '').trim();
   if (!baseUrl || !model) return extractiveProvider;
 
-  const key = await getStoredKey();
+  const key = await getStoredKey(preset.id);
   if (preset.requiresKey && !key) return extractiveProvider;
 
   return new OpenAiCompatibleProvider({

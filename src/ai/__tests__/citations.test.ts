@@ -152,3 +152,53 @@ describe('verifyCitations', () => {
     expect(filterValidCitations([citation(quote)], sources)).toHaveLength(1);
   });
 });
+
+describe('verifyCitations metadata', () => {
+  const sourced: AiRequest['sources'] = [
+    { chunkId: 'c1', text: CHUNK, page: 215, sectionTitle: 'Luck & Risk' },
+  ];
+  const exact = 'It is the result of reinvesting interest rather than paying it out.';
+
+  it('fills page and sectionTitle from the source when missing', () => {
+    const result = verifyCitations([citation(exact)], sourced);
+    expect(result.kept).toHaveLength(1);
+    expect(result.kept[0]).toMatchObject({
+      chunkId: 'c1',
+      page: 215,
+      sectionTitle: 'Luck & Risk',
+    });
+  });
+
+  it('keeps a page the model got right', () => {
+    const result = verifyCitations([{ ...citation(exact), page: 12 }], sourced);
+    expect(result.kept[0].page).toBe(12);
+    expect(result.kept[0].sectionTitle).toBe('Luck & Risk');
+  });
+
+  it('fills page and sectionTitle on a repaired citation', () => {
+    const result = verifyCitations(
+      [citation('Bananas are an excellent source of potassium and taste wonderful.')],
+      sourced,
+      { query: 'compound interest' },
+    );
+    expect(result.repaired).toBe(1);
+    expect(result.kept[0]).toMatchObject({
+      chunkId: 'c1',
+      page: 215,
+      sectionTitle: 'Luck & Risk',
+    });
+  });
+
+  it('still rejects a chunk id that matches no source', () => {
+    const result = verifyCitations([citation(exact, 'ghost')], sourced);
+    expect(result.kept).toHaveLength(0);
+    expect(result.rejected).toBe(1);
+  });
+
+  it('does not invent metadata a source does not have', () => {
+    const result = verifyCitations([citation(exact)], sources);
+    expect(result.kept[0].page).toBe(4);
+    expect(result.kept[0].sectionTitle).toBeNull();
+  });
+});
+

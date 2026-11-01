@@ -46,8 +46,8 @@ const MAX_CALLS = 28;
 const MAX_SOURCE_IDS = 2_000;
 const MAX_BATCH_CHARS = 12_000;
 const MAX_NOTE_CHARS = 400;
-const MAP_OUTPUT_TOKENS = 700;
-const REDUCE_OUTPUT_TOKENS = 1_200;
+const MAP_OUTPUT_TOKENS = 1_500;
+const REDUCE_OUTPUT_TOKENS = 2_000;
 const LONG_CALL_TIMEOUT_MS = 90_000;
 
 export function wordsForMinutes(minutes: 5 | 15 | 25): number {
