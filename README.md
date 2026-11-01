@@ -12,7 +12,7 @@ traffic is the requests you trigger, to a model provider you chose.
   <a href="https://github.com/ItsAakif/freehaven/actions/workflows/android-beta.yml"><img alt="Build" src="https://github.com/ItsAakif/freehaven/actions/workflows/android-beta.yml/badge.svg?branch=beta"></a>
   <img alt="Platform" src="https://img.shields.io/badge/platform-Android-black">
   <img alt="Expo" src="https://img.shields.io/badge/Expo-58-black">
-  <img alt="Checks" src="https://img.shields.io/badge/checks-615%20passing-black">
+  <img alt="Checks" src="https://img.shields.io/badge/checks-621%20passing-black">
   <img alt="Licence" src="https://img.shields.io/badge/licence-MIT-black">
 </p>
 
@@ -34,7 +34,7 @@ progress, because the interesting states are the ones with real work in them.
   </tr>
   <tr>
     <td align="center"><img src="img/5.jpg" width="240"><br><sub><b>Full guide</b> - chapters, progress, PDF, per-chapter rewrite</sub></td>
-    <td align="center"><img src="img/6.jpg" width="240"><br><sub><b>Plan</b> - the guide as a one-chapter-a-day path</sub></td>
+    <td align="center"><img src="img/6.jpg" width="240"><br><sub><b>Create narration</b> - seven narration styles, one book</sub></td>
   </tr>
   <tr>
     <td align="center"><img src="img/7.jpg" width="240"><br><sub><b>Ask</b> - an answer grounded in the book, with citations</sub></td>
@@ -153,7 +153,7 @@ preset row, not a code path.
 | **AI** | Bring your own key against 13 presets (OpenRouter, OpenCode Go, Gemini, Groq, OpenAI, DeepSeek, Mistral, Cerebras, Together, Fireworks, Ollama, LM Studio, custom), stored per provider |
 | **Documents** | pdf-lib for branded PDFs, JSZip + fast-xml-parser + pako for EPUB |
 | **Icons / art** | iconoir-react-native, one icon map; hand-drawn mark and launcher art |
-| **Checks** | Jest 30 (73 suites, 615 tests), tsc, ESLint 9, Expo Doctor |
+| **Checks** | Jest 30 (73 suites, 621 tests), tsc, ESLint 9, Expo Doctor |
 | **CI** | GitHub Actions: typecheck, lint, tests, prebuild, Gradle release APK, artefact upload |
 
 ---
@@ -192,7 +192,7 @@ npx eslint .
 npx jest --runInBand
 ```
 
-`73 suites, 615 tests`, covering the schema and migrations, chapter detection on a real
+`73 suites, 621 tests`, covering the schema and migrations, chapter detection on a real
 253-page PDF, the word budget and retry path, the guide runner (failure isolation,
 cancel, resume, foreground lifecycle), plan ordering, FTS5 retrieval, provider transport,
 JSON repair, per-provider key storage, PDF layout, and the reader's position maths.
@@ -257,3 +257,5 @@ MIT. Third-party notices for PdfBox, Kokoro and sherpa-onnx are in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 This is a reading and learning tool, not financial, medical or legal advice.
+
+
