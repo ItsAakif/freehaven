@@ -16,11 +16,9 @@ traffic is the requests you trigger, to a model provider you chose.
   <img alt="Licence" src="https://img.shields.io/badge/licence-MIT-black">
 </p>
 
-<p align="center">
-  <img src="img/launch-preview.gif" alt="Freehaven launch video" width="520">
-  <br>
-  <sub><b>Launch video</b> &nbsp;&middot;&nbsp; <a href="img/launch.mp4">watch the 27-second version with sound</a></sub>
-</p>
+https://github.com/user-attachments/assets/6f1f28d7-45dc-4162-8df1-104260b43ce8
+
+<p align="center"><sub><b>27-second launch video</b> &nbsp;&middot;&nbsp; captured on a phone</sub></p>
 
 ---
 
