@@ -9,7 +9,7 @@ one chapter a day as a learning path. Everything lives in SQLite on the device; 
 traffic is the requests you trigger, to a model provider you chose.
 
 <p>
-  <a href="https://github.com/ItsAakif/freehaven/actions/workflows/android-beta.yml"><img alt="Build" src="https://github.com/ItsAakif/freehaven/actions/workflows/android-beta.yml/badge.svg?branch=beta"></a>
+  <a href="https://github.com/ItsAakif/freehaven/actions/workflows/android-beta.yml"><img alt="Build" src="https://github.com/ItsAakif/freehaven/actions/workflows/android-beta.yml/badge.svg?branch=main"></a>
   <img alt="Platform" src="https://img.shields.io/badge/platform-Android-black">
   <img alt="Expo" src="https://img.shields.io/badge/Expo-58-black">
   <img alt="Checks" src="https://img.shields.io/badge/checks-621%20passing-black">
@@ -257,5 +257,6 @@ MIT. Third-party notices for PdfBox, Kokoro and sherpa-onnx are in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 This is a reading and learning tool, not financial, medical or legal advice.
+
 
 

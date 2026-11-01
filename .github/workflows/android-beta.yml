@@ -1,8 +1,8 @@
-name: Android beta
+﻿name: Android beta
 
 on:
   push:
-    branches: [beta]
+    branches: [beta, main]
   pull_request:
     branches: [beta]
   workflow_dispatch:
@@ -99,3 +99,4 @@ jobs:
             android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
+
