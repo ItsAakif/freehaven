@@ -17,9 +17,9 @@ traffic is the requests you trigger, to a model provider you chose.
 </p>
 
 <p align="center">
-  <a href="img/launch.mp4"><img src="img/launch-poster.jpg" alt="Freehaven launch video" width="620"></a>
+  <img src="img/launch-preview.gif" alt="Freehaven launch video" width="520">
   <br>
-  <sub><b>27-second launch video</b> - click to play</sub>
+  <sub><b>Launch video</b> &nbsp;&middot;&nbsp; <a href="img/launch.mp4">watch the 27-second version with sound</a></sub>
 </p>
 
 ---
