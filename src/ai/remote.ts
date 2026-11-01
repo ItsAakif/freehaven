@@ -405,13 +405,46 @@ export class OpenAiCompatibleProvider implements AiProvider {
     let totalHttpAttempts = 0;
     let downgrades = 0;
     let reasked = false;
-    let emptyRetried = false;
+    const emptyRetried = new Set<ResponseStrategy>();
+    let promptOnlyTried = false;
+    let forcedPromptOnly = false;
     let reaskMessages: ChatMessage[] | null = null;
     let reaskMaxTokens: number | undefined;
     let lastError: Error | null = null;
+    const promptOnlyIndex = strategies.indexOf('prompt_only');
 
-    while (strategyIndex < strategies.length) {
-      const strategy = strategies[strategyIndex];
+    /**
+     * One empty response per strategy is retried. A JSON rung that comes back
+     * empty is retried in prompt-only mode with the identical request (only
+     * response_format changes), because an empty JSON body usually means the
+     * endpoint cannot honour the format rather than that the model is down.
+     * prompt_only itself keeps the old single repeat before degrading.
+     */
+    const retryEmpty = (strategy: ResponseStrategy, messages: ChatMessage[]): boolean => {
+      if (emptyRetried.has(strategy)) return false;
+      emptyRetried.add(strategy);
+      if (strategy !== 'prompt_only' && !promptOnlyTried) {
+        if (promptOnlyIndex !== -1) {
+          strategyIndex = promptOnlyIndex;
+          forcedPromptOnly = false;
+        } else {
+          // The ladder may be a single learned/override rung; prompt_only is
+          // still the terminal plain-text attempt.
+          forcedPromptOnly = true;
+        }
+      }
+      // Reuse the exact messages and output budget from the failed attempt.
+      reaskMessages = messages;
+      attemptsThisRung = 0;
+      reasked = false;
+      return true;
+    };
+
+    while (strategyIndex < strategies.length || forcedPromptOnly) {
+      const strategy: ResponseStrategy = forcedPromptOnly
+        ? 'prompt_only'
+        : strategies[strategyIndex];
+      if (strategy === 'prompt_only') promptOnlyTried = true;
       if (Date.now() - startedAt > MAX_CALL_MS) {
         lastError = new Error(`The request to ${this.host()} exceeded the time budget.`);
         break;
@@ -490,7 +523,7 @@ export class OpenAiCompatibleProvider implements AiProvider {
           break;
         }
 
-        if (classification === 'downgrade' && downgrades < MAX_DOWNGRADES) {
+        if (classification === 'downgrade' && !forcedPromptOnly && downgrades < MAX_DOWNGRADES) {
           const nextIndex = strategyIndex + 1;
           const next = nextIndex < strategies.length ? strategies[nextIndex] : null;
           if (next) {
@@ -520,25 +553,8 @@ export class OpenAiCompatibleProvider implements AiProvider {
       const { content, finishReason } = extractContent(payload);
       if (!content.trim()) {
         // An empty response is usually a format/rung problem, not a dead
-        // endpoint. Make exactly one extra attempt: advance the ladder when a
-        // weaker rung exists, otherwise repeat the current (prompt_only) rung.
-        if (!emptyRetried) {
-          emptyRetried = true;
-          if (strategy !== 'prompt_only') {
-            const nextIndex = strategyIndex + 1;
-            if (nextIndex < strategies.length) {
-              strategyIndex = nextIndex;
-            } else {
-              const promptOnlyIndex = strategies.indexOf('prompt_only');
-              if (promptOnlyIndex !== -1) strategyIndex = promptOnlyIndex;
-            }
-          }
-          attemptsThisRung = 0;
-          reasked = false;
-          reaskMessages = null;
-          reaskMaxTokens = undefined;
-          continue;
-        }
+        // endpoint: retry it in prompt-only mode before degrading.
+        if (retryEmpty(strategy, messages)) continue;
         lastError = new AiUnavailableError('Model returned an empty response.');
         break;
       }
@@ -561,6 +577,9 @@ export class OpenAiCompatibleProvider implements AiProvider {
       }
 
       if (!output.text.trim()) {
+        // Same rule as an empty body: a JSON rung that yields an unusable
+        // payload gets one prompt-only retry before the extractive floor.
+        if (retryEmpty(strategy, messages)) continue;
         lastError = new AiUnavailableError('Model returned no usable answer.');
         break;
       }

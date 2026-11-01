@@ -390,7 +390,7 @@ describe('remote provider', () => {
     expect(response.text.toLowerCase()).toContain('interest');
   });
 
-  it('retries an empty model response once on the next strategy', async () => {
+  it('retries an empty model response once in prompt-only mode', async () => {
     const fetchImpl = jest
       .fn()
       .mockResolvedValueOnce(chatResponse(''))
@@ -406,8 +406,158 @@ describe('remote provider', () => {
     const response = await provider.generate({ task: 'summary', sources });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(response.degraded).toBeFalsy();
-    expect(response.strategy).toBe('json_object');
+    expect(response.strategy).toBe('prompt_only');
     expect(response.text).toContain('Compound interest');
+  });
+
+  it('retries an empty json_schema body with prompt_only and uses the plain text', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const fetchImpl = jest
+      .fn()
+      .mockImplementationOnce(async (_url: string, init: RequestInit) => {
+        bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+        return chatResponse('');
+      })
+      .mockImplementationOnce(async (_url: string, init: RequestInit) => {
+        bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+        return chatResponse('Compound interest grows through reinvested interest.');
+      });
+    const provider = new OpenAiCompatibleProvider({
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini',
+      apiKey: 'secret',
+      presetId: 'openai',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    const response = await provider.generate({ task: 'summary', sources });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(response.degraded).toBeFalsy();
+    expect(response.strategy).toBe('prompt_only');
+    expect(response.text).toContain('Compound interest');
+    expect(bodies[0].response_format).toEqual({
+      type: 'json_schema',
+      json_schema: expect.objectContaining({ name: 'grounded_answer', strict: true }),
+    });
+    expect(bodies[1]).not.toHaveProperty('response_format');
+  });
+
+  it('retries an empty json_object body with prompt_only and uses the plain text', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const fetchImpl = jest
+      .fn()
+      .mockImplementationOnce(async (_url: string, init: RequestInit) => {
+        bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+        return chatResponse('');
+      })
+      .mockImplementationOnce(async (_url: string, init: RequestInit) => {
+        bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+        return chatResponse('Compound interest grows through reinvested interest.');
+      });
+    const provider = new OpenAiCompatibleProvider({
+      baseUrl: 'https://api.groq.com/openai/v1',
+      model: 'llama-3.3-70b-versatile',
+      apiKey: 'secret',
+      presetId: 'groq',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    const response = await provider.generate({ task: 'summary', sources });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(response.degraded).toBeFalsy();
+    expect(response.strategy).toBe('prompt_only');
+    expect(response.text).toContain('Compound interest');
+    expect(bodies[0].response_format).toEqual({ type: 'json_object' });
+    expect(bodies[1]).not.toHaveProperty('response_format');
+  });
+
+  it('retries a JSON body that normalises to nothing with prompt_only', async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValueOnce(chatResponse('{"answer":""}'))
+      .mockResolvedValueOnce(chatResponse('Compound interest grows through reinvested interest.'));
+    const provider = new OpenAiCompatibleProvider({
+      baseUrl: 'https://api.groq.com/openai/v1',
+      model: 'llama-3.3-70b-versatile',
+      apiKey: 'secret',
+      presetId: 'groq',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    const response = await provider.generate({ task: 'summary', sources });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(response.degraded).toBeFalsy();
+    expect(response.strategy).toBe('prompt_only');
+    expect(response.text).toContain('Compound interest');
+  });
+
+  it('changes only response_format when retrying a JSON body in prompt-only mode', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const fetchImpl = jest
+      .fn()
+      .mockImplementationOnce(async (_url: string, init: RequestInit) => {
+        bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+        return chatResponse('');
+      })
+      .mockImplementationOnce(async (_url: string, init: RequestInit) => {
+        bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+        return chatResponse('Compound interest grows through reinvested interest.');
+      });
+    const provider = new OpenAiCompatibleProvider({
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini',
+      apiKey: 'secret',
+      presetId: 'openai',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    await provider.generate({ task: 'summary', sources, maxOutputTokens: 1_234 });
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1].response_format).toBeUndefined();
+    expect(bodies[1].model).toBe(bodies[0].model);
+    expect(bodies[1].max_tokens).toBe(bodies[0].max_tokens);
+    expect(bodies[1].messages).toEqual(bodies[0].messages);
+  });
+
+  it('degrades after two empty prompt_only attempts without looping', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(chatResponse(''));
+    const provider = new OpenAiCompatibleProvider({
+      baseUrl: 'http://192.168.1.10:11434/v1',
+      model: 'llama3.2',
+      apiKey: '',
+      presetId: 'ollama',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    const response = await provider.generate({ task: 'summary', sources });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(response.degraded).toBe(true);
+    expect(response.provider).toBe('extractive');
+    expect(response.text.toLowerCase()).toContain('interest');
+  });
+
+  it('uses the first attempt when a JSON response is usable', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      chatResponse(
+        JSON.stringify({
+          answer: 'Compound interest is interest on interest.',
+          citations: [{ chunkId: 'c1', quote: 'Compound interest is the addition of interest' }],
+        }),
+      ),
+    );
+    const provider = new OpenAiCompatibleProvider({
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini',
+      apiKey: 'secret',
+      presetId: 'openai',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    const response = await provider.generate(answerRequest);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(response.degraded).toBeFalsy();
+    expect(response.strategy).toBe('json_schema');
+    expect(response.citations[0].chunkId).toBe('c1');
   });
 
   it('falls back on network failure and surfaces the reason', async () => {
