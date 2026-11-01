@@ -101,11 +101,19 @@ export default function FullGuideScreen() {
   const running = isGuideRunning(guideId);
   useEffect(() => {
     if (!running) return undefined;
-    const timer = setInterval(() => setTick((value) => value + 1), 1000);
+    const timer = setInterval(() => setTick((value) => value + 1), 1500);
     return () => clearInterval(timer);
   }, [running]);
 
-  if (state.loading) {
+  // Keep the last good result across a poll: a refresh must never unmount the
+  // list, because that resets scroll position and drops in-flight taps.
+  const [lastData, setLastData] = useState<typeof state.data>(undefined);
+  useEffect(() => {
+    if (state.data !== undefined) setLastData(state.data);
+  }, [state.data]);
+  const view = state.data ?? lastData;
+
+  if (state.loading && !view) {
     return (
       <Screen>
         <Header title="Full guide" onBack={() => router.back()} />
@@ -114,7 +122,7 @@ export default function FullGuideScreen() {
     );
   }
 
-  if (!state.data?.guide) {
+  if (!view?.guide) {
     return (
       <Screen>
         <Header title="Full guide" onBack={() => router.back()} />
@@ -129,10 +137,12 @@ export default function FullGuideScreen() {
     );
   }
 
-  const { guide, book, chapters, stats } = state.data;
+  const { guide, book, chapters, stats } = view;
   const allHaveSummary =
     chapters.length > 0 && chapters.every((chapter) => !!chapter.summaryMd?.trim());
-  const degraded = chapters.some((chapter) => (chapter.provider ?? '').endsWith('+extract'));
+  const extractChapterIds = chapters
+    .filter((chapter) => (chapter.provider ?? '').endsWith('+extract'))
+    .map((chapter) => chapter.id);
   const failedChapterIds = chapters
     .filter((chapter) => chapter.status === 'failed')
     .map((chapter) => chapter.id);
@@ -140,8 +150,8 @@ export default function FullGuideScreen() {
   const generationProgress = stats.chapters ? stats.ready / stats.chapters : 0;
   const interrupted = guide.status === 'generating' && !running;
 
-  const generate = (chapterIds?: string[]) => {
-    void startGuideGeneration({ guideId, mode: 'all', chapterIds });
+  const generate = (chapterIds?: string[], rewrite?: boolean) => {
+    void startGuideGeneration({ guideId, mode: 'all', chapterIds, rewrite });
     setTick((value) => value + 1);
   };
 
@@ -282,12 +292,22 @@ export default function FullGuideScreen() {
         </Card>
       ) : null}
 
-      {degraded ? (
+      {extractChapterIds.length > 0 ? (
         <Card style={{ backgroundColor: palette.accentSoft, borderColor: palette.line }}>
           <AppText variant="bodySm" muted>
             Part of this guide used an on-device extract because the model returned an empty
             response. Generate the chapter again for a full model summary.
           </AppText>
+          <View style={{ marginTop: space.md }}>
+            <Button
+              label="Rewrite extracts"
+              icon="refresh-outline"
+              variant="secondary"
+              size="sm"
+              disabled={running}
+              onPress={() => generate(extractChapterIds, true)}
+            />
+          </View>
         </Card>
       ) : null}
 
@@ -305,6 +325,7 @@ export default function FullGuideScreen() {
         </AppText>
         {chapters.map((chapter) => {
           const ready = chapter.status === 'ready';
+          const isExtract = (chapter.provider ?? '').endsWith('+extract');
           const cleanTitle = stripChapterNumber(chapter.title) || chapter.title;
           const excerpt = summaryExcerpt(chapter.summaryMd);
           return (
@@ -392,6 +413,16 @@ export default function FullGuideScreen() {
                         variant="secondary"
                         size="sm"
                         onPress={() => toggleDone(chapter)}
+                      />
+                    ) : null}
+                    {isExtract ? (
+                      <Button
+                        label="Rewrite"
+                        icon="refresh-outline"
+                        variant="secondary"
+                        size="sm"
+                        disabled={running}
+                        onPress={() => generate([chapter.id], true)}
                       />
                     ) : null}
                   </View>

@@ -12,7 +12,7 @@ import { resolveProvider } from '@/ai';
 import type { AiProvider, AiRequest, AiResponse, GroundedSource } from '@/ai/types';
 import { saveSummary } from '@/data/repositories/learning';
 import { getDocument, listChunksForBook, listSections } from '@/data/repositories/reading';
-import { wordCount } from '@/domain/text';
+import { wordCount, sectionHeading } from '@/domain/text';
 import type { Chunk, SummaryKind } from '@/domain/types';
 import { getNarrationStyle } from '@/features/narration/styles';
 import type { NarrationStyleId } from '@/domain/narration';
@@ -377,7 +377,7 @@ function sourceFor(chunk: Chunk, titles: Map<string, string>): GroundedSource {
     chunkId: chunk.id,
     text: chunk.text,
     page: chunk.page,
-    sectionTitle: chunk.sectionId ? (titles.get(chunk.sectionId) ?? null) : null,
+    sectionTitle: sectionHeading(chunk.sectionId ? (titles.get(chunk.sectionId) ?? null) : null),
   };
 }
 
@@ -448,7 +448,7 @@ export async function summariseBookDeep(input: {
   const windowInputs: WindowInput[] = chunks.map((chunk) => ({
     id: chunk.id,
     text: chunk.text,
-    sectionTitle: chunk.sectionId ? (titles.get(chunk.sectionId) ?? null) : null,
+    sectionTitle: sectionHeading(chunk.sectionId ? (titles.get(chunk.sectionId) ?? null) : null),
   }));
   const totalChars = chunks.reduce((sum, chunk) => sum + chunk.text.length, 0);
   const tier = planTiers(totalChars);

@@ -226,3 +226,13 @@ export function extractDefinitions(text: string, limit = 6): { term: string; def
 export function searchKey(input: string): string {
   return input.toLowerCase().replace(/\s+/g, ' ').trim();
 }
+
+/**
+ * A section title suitable as a heading. PDF imports name sections `Page N`
+ * (document machinery, not a heading), so those return null.
+ */
+export function sectionHeading(title: string | null | undefined): string | null {
+  const trimmed = (title ?? '').trim();
+  if (!trimmed) return null;
+  return /^\s*page\s+\d+\s*$/i.test(trimmed) ? null : trimmed;
+}

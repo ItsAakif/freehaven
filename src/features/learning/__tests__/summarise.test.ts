@@ -53,7 +53,7 @@ function makeChunks(count: number): Chunk[] {
   }));
 }
 
-async function seedBook(count = 40): Promise<Chunk[]> {
+async function seedTitledBook(title: string, count = 40): Promise<Chunk[]> {
   await upsertCatalogueBook({
     id: BOOK_ID,
     provider: 'gutendex',
@@ -77,7 +77,7 @@ async function seedBook(count = 40): Promise<Chunk[]> {
     id: SECTION_ID,
     documentId: DOCUMENT_ID,
     ordinal: 0,
-    title: 'Chapter One',
+    title,
     href: null,
     startPage: 1,
     endPage: 10,
@@ -87,6 +87,10 @@ async function seedBook(count = 40): Promise<Chunk[]> {
   };
   await replaceExtraction(DOCUMENT_ID, [section], chunks);
   return chunks;
+}
+
+async function seedBook(count = 40): Promise<Chunk[]> {
+  return seedTitledBook('Chapter One', count);
 }
 
 async function seedTwoSections(): Promise<void> {
@@ -199,6 +203,18 @@ class FakeProvider implements AiProvider {
       };
     }
     return { text: 'canned text', citations: [], provider: this.id };
+  }
+}
+
+/** Echoes the source section title into the script so a leaked label is visible. */
+class SectionTitleProvider extends FakeProvider {
+  async generate(request: AiRequest): Promise<AiResponse> {
+    const response = await super.generate(request);
+    if (request.task !== 'script') return response;
+    const titles = request.sources
+      .map((source) => source.sectionTitle)
+      .filter((title): title is string => !!title);
+    return titles.length ? { ...response, text: `${titles.join(' ')} ${response.text}` } : response;
   }
 }
 
@@ -331,6 +347,28 @@ describe('summariseBookDeep', () => {
     expect(output.sourceChunkIds).toEqual(['c2']);
     expect(output.summaryId).toBeNull();
     expect(await listSummaries(BOOK_ID)).toHaveLength(0);
+  });
+
+  it('never uses a page label as a section heading', async () => {
+    await seedTitledBook('Page 15');
+    const output = await summariseBookDeep({
+      bookId: BOOK_ID,
+      kind: 'summary',
+      targetWords: 700,
+      provider: new SectionTitleProvider(),
+    });
+    expect(output.text).not.toMatch(/page\s+\d+/i);
+  });
+
+  it('preserves a normal section title', async () => {
+    await seedTitledBook('Chapter One');
+    const output = await summariseBookDeep({
+      bookId: BOOK_ID,
+      kind: 'summary',
+      targetWords: 700,
+      provider: new SectionTitleProvider(),
+    });
+    expect(output.text).toContain('Chapter One');
   });
 
   it('degrades to extractive when 40% of map calls fail, and still persists a summary', async () => {

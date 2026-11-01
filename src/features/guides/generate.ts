@@ -53,6 +53,22 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+const PAGE_LABEL_PREFIX = /^\s*page\s+\d+\s*(?:[:\u2014\u2013-]\s*)?/i;
+
+/**
+ * PDF imports name each section `Page N`; the summariser can leak that label
+ * into the prose. Strip only a line-leading page marker so real prose and
+ * titles such as `Page Turners` are untouched.
+ */
+export function stripPageLabels(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.replace(PAGE_LABEL_PREFIX, ''))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 /** A foreground notification must never fail or delay guide generation. */
 function fireForeground(run: () => Promise<void>): void {
   try {
@@ -160,7 +176,7 @@ export async function generateGuideChapter(input: {
         signal: input.signal,
       });
 
-      let text = result.text.trim();
+      let text = stripPageLabels(result.text.trim());
       if (!text) {
         await setGuideChapterStatus(chapter.id, 'failed', 'empty_summary');
         throw new Error('empty_summary');
@@ -184,7 +200,7 @@ export async function generateGuideChapter(input: {
           provider: input.provider,
           signal: input.signal,
         });
-        const retryText = retry.text.trim();
+        const retryText = stripPageLabels(retry.text.trim());
         if (retryText) {
           let retryCandidate = retryText;
           let retryWords = wordCount(retryCandidate);
@@ -375,7 +391,9 @@ export async function cancelGuideGeneration(guideId: string): Promise<void> {
 function shouldSkip(
   chapter: GuideChapter,
   mode: GuideMode,
+  rewrite = false,
 ): 'ready' | 'scripted' | null {
+  if (rewrite) return null;
   if (mode !== 'script' && chapter.status === 'ready') return 'ready';
   if (mode === 'script' && chapter.summaryMd && chapter.status !== 'failed') return 'scripted';
   return null;
@@ -394,6 +412,8 @@ export async function startGuideGeneration(input: {
   provider?: AiProvider;
   signal?: AbortSignal;
   now?: number;
+  /** Re-run the selected chapters even when they are already ready (extractive rewrite). */
+  rewrite?: boolean;
   onProgress?: (p: {
     done: number;
     total: number;
@@ -454,10 +474,11 @@ export async function startGuideGeneration(input: {
       );
     };
 
+    const rewrite = input.rewrite === true && !!input.chapterIds?.length;
     for (const chapter of selected) {
       if (controller.signal.aborted) break;
 
-      const skip = shouldSkip(chapter, input.mode);
+      const skip = shouldSkip(chapter, input.mode, rewrite);
       if (skip) {
         completed += 1;
         reportChapter(chapter);
@@ -480,6 +501,7 @@ export async function startGuideGeneration(input: {
           engine: input.engine,
           provider: input.provider,
           signal: controller.signal,
+          rewrite,
         });
         completed += 1;
       } catch (error) {

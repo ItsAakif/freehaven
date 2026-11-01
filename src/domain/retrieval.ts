@@ -18,21 +18,49 @@ export interface SearchHit {
 const K1 = 1.2;
 const B = 0.75;
 
+/**
+ * Drop query terms that appear in most documents.
+ *
+ * A word like "book" in "what is the main argument of this book?" occurs in
+ * almost every chunk, so its idf is near zero and it cannot discriminate
+ * between passages — yet its accumulated term frequency is enough to shuffle
+ * the ranking arbitrarily. Filtering by document frequency keeps the query's
+ * distinctive terms in charge. The list is never emptied: when every term is
+ * boilerplate we fall back to the rarest term(s), preserving query order.
+ */
+export function selectTerms(
+  terms: string[],
+  docFrequencies: Map<string, number>,
+  docCount: number,
+  maxDfRatio = 0.4,
+): string[] {
+  if (!terms.length) return [];
+  const dfOf = (term: string) => docFrequencies.get(term) ?? 0;
+  if (docCount <= 0) return [...terms];
+  const kept = terms.filter((term) => dfOf(term) / docCount <= maxDfRatio);
+  if (kept.length) return kept;
+  // All terms are boilerplate: keep the lowest-df ones rather than nothing.
+  const minDf = Math.min(...terms.map(dfOf));
+  return terms.filter((term) => dfOf(term) === minDf);
+}
+
 export function bm25(
   query: string,
   docs: { id: string; text: string }[],
   options: { limit?: number } = {},
 ): { id: string; score: number; matchedTerms: string[] }[] {
-  const terms = [...new Set(tokenize(query))];
-  if (!terms.length || !docs.length) return [];
+  const rawTerms = [...new Set(tokenize(query))];
+  if (!rawTerms.length || !docs.length) return [];
   const tokenized = docs.map((d) => tokenize(d.text));
   const lengths = tokenized.map((t) => t.length);
   const avgLen = lengths.reduce((a, b) => a + b, 0) / Math.max(1, lengths.length);
   const df = new Map<string, number>();
-  for (const term of terms) {
+  for (const term of rawTerms) {
     df.set(term, tokenized.reduce((acc, tokens) => acc + (tokens.includes(term) ? 1 : 0), 0));
   }
   const N = docs.length;
+  const terms = selectTerms(rawTerms, df, N);
+  if (!terms.length) return [];
   const scored = docs.map((doc, i) => {
     const tokens = tokenized[i];
     const tf = new Map<string, number>();

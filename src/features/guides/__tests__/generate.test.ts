@@ -20,6 +20,7 @@ import {
   cancelGuideGeneration,
   generateGuideChapter,
   startGuideGeneration,
+  stripPageLabels,
 } from '@/features/guides/generate';
 
 const BOOK_ID = 'b1';
@@ -327,6 +328,55 @@ describe('guide generation', () => {
     expect((await getGuide(guide.id))?.status).toBe('generated');
   });
 
+  it('rewrites a ready extractive chapter when rewrite is true', async () => {
+    const { guide, chapters } = await makeGuide(1);
+    await startGuideGeneration({
+      guideId: guide.id,
+      mode: 'all',
+      engine: new FakeEngine('remote'),
+      provider: new FakeProvider(1, true),
+    });
+
+    const extracted = (await getGuideChapter(chapters[0].id))!;
+    expect(extracted.status).toBe('ready');
+    expect(extracted.provider).toBe('fake+extract');
+
+    const rewriteProvider = new FakeProvider(0.9);
+    const rewriteEngine = new FakeEngine('remote');
+    const result = await startGuideGeneration({
+      guideId: guide.id,
+      mode: 'all',
+      chapterIds: [chapters[0].id],
+      rewrite: true,
+      engine: rewriteEngine,
+      provider: rewriteProvider,
+    });
+
+    expect(result).toEqual({
+      completed: 1,
+      failed: 0,
+      cancelled: false,
+      alreadyRunning: false,
+    });
+    expect(rewriteProvider.calls.length).toBeGreaterThan(0);
+    expect(rewriteEngine.calls).toBeGreaterThan(0);
+    const rewritten = (await getGuideChapter(chapters[0].id))!;
+    expect(rewritten.status).toBe('ready');
+    expect(rewritten.provider).toBe('fake');
+
+    // A plain resume still skips the now-ready chapter and does not touch its script.
+    const resumeEngine = new FakeEngine('remote');
+    const resumed = await startGuideGeneration({
+      guideId: guide.id,
+      mode: 'all',
+      engine: resumeEngine,
+      provider: new ThrowingProvider(),
+    });
+    expect(resumed.completed).toBe(1);
+    expect(resumeEngine.calls).toBe(0);
+    expect((await getGuideChapter(chapters[0].id))?.summaryMd).toBe(rewritten.summaryMd);
+  });
+
   it('does not start a second run while one is active', async () => {
     const { guide } = await makeGuide(1);
     const foreground = installForeground();
@@ -570,5 +620,21 @@ describe('guide generation', () => {
       }),
     ).rejects.toThrow('no_sections');
     expect((await getGuideChapter(chapters[0].id))?.error).toBe('no_sections');
+  });
+});
+
+describe('stripPageLabels', () => {
+  it('removes a leading page marker from each paragraph', () => {
+    expect(stripPageLabels('Page 15 Here is the thing.')).toBe('Here is the thing.');
+    expect(stripPageLabels('page 15: A fresh start')).toBe('A fresh start');
+    expect(stripPageLabels('Page 7 — A turn')).toBe('A turn');
+    expect(stripPageLabels('Page 1 First.\n\nPage 2 Second.')).toBe('First.\n\nSecond.');
+  });
+
+  it('leaves real titles and mid-sentence references untouched', () => {
+    expect(stripPageLabels('Page Turners move quickly.')).toBe('Page Turners move quickly.');
+    expect(stripPageLabels('As we saw on page 15, the idea holds.')).toBe(
+      'As we saw on page 15, the idea holds.',
+    );
   });
 });
