@@ -4,10 +4,12 @@ import { ABSTAIN_TEXT, type AiRequest } from '@/ai/types';
 import { wordCount } from '@/domain/text';
 import {
   OpenAiCompatibleProvider,
+  buildRequestHeaders,
   buildUserPrompt,
   filterValidCitations,
   parseModelJson,
 } from '@/ai/remote';
+import { getPreset, type ProviderPreset } from '@/ai/presets';
 import { currentProviderLabel, resolveProvider } from '@/ai';
 import { usePreferences } from '@/state/preferences';
 
@@ -442,6 +444,83 @@ describe('remote provider', () => {
     const response = await provider.generate(answerRequest);
     expect(response.degraded).toBe(true);
     expect(response.text).toContain('timed out');
+  });
+
+  it('sends the OpenCode Go preset headers on every attempt', async () => {
+    const requestHeaders: Record<string, string>[] = [];
+    const fetchImpl = jest
+      .fn()
+      .mockImplementationOnce(async (_url: string, init: RequestInit) => {
+        requestHeaders.push(init.headers as Record<string, string>);
+        return errorResponse(429, 'slow down');
+      })
+      .mockImplementationOnce(async (_url: string, init: RequestInit) => {
+        requestHeaders.push(init.headers as Record<string, string>);
+        return chatResponse('Compound interest is interest on interest.');
+      });
+    const provider = new OpenAiCompatibleProvider({
+      baseUrl: 'https://opencode.ai/inference/go/openai/v1',
+      model: 'deepseek-v4.1-flash',
+      apiKey: 'secret',
+      presetId: 'opencode-go',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    const response = await provider.generate({ task: 'summary', sources });
+    expect(response.degraded).toBeFalsy();
+    expect(requestHeaders).toHaveLength(2);
+    for (const headers of requestHeaders) {
+      expect(headers['Content-Type']).toBe('application/json');
+      expect(headers.Authorization).toBe('Bearer secret');
+      expect(headers['User-Agent']).toBe('Freehaven/1.0');
+      expect(headers['x-opencode-session']).toMatch(/^freehaven-/);
+    }
+  });
+
+  it('never lets a preset header override the transport headers it owns', () => {
+    const preset: ProviderPreset = {
+      ...getPreset('openrouter'),
+      headers: {
+        Authorization: 'Bearer not-the-real-key',
+        'content-type': 'text/plain',
+        'X-Custom': 'yes',
+      },
+    };
+    const headers = buildRequestHeaders(preset, 'real-key');
+    expect(headers.Authorization).toBe('Bearer real-key');
+    expect(headers['Content-Type']).toBe('application/json');
+    expect(headers['X-Custom']).toBe('yes');
+    expect(Object.keys(headers).filter((key) => key.toLowerCase() === 'authorization')).toHaveLength(
+      1,
+    );
+    expect(Object.keys(headers).filter((key) => key.toLowerCase() === 'content-type')).toHaveLength(
+      1,
+    );
+
+    const keyless = buildRequestHeaders(preset, '');
+    expect(keyless).not.toHaveProperty('Authorization');
+  });
+
+  it('keeps the previous header set for presets without headers', async () => {
+    let sent: Record<string, string> | null = null;
+    const fetchImpl = jest.fn(async (_url: string, init: RequestInit) => {
+      sent = init.headers as Record<string, string>;
+      return chatResponse('Compound interest is interest on interest.');
+    });
+    const provider = new OpenAiCompatibleProvider({
+      baseUrl: 'https://api.groq.com/openai/v1',
+      model: 'llama-3.3-70b-versatile',
+      apiKey: 'secret',
+      presetId: 'groq',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    await provider.generate({ task: 'summary', sources });
+    expect(sent).toEqual({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer secret',
+    });
+    expect(Object.keys(sent ?? {})).toEqual(['Content-Type', 'Authorization']);
   });
 
   it('is unavailable without a key', async () => {

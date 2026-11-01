@@ -39,6 +39,11 @@ export interface ProviderPreset {
   capabilities: ProviderCapabilities;
   /** Per attempt. */
   timeoutMs: number;
+  /**
+   * Static headers sent with every request. Never put secrets here: the
+   * transport owns Authorization and refuses preset overrides.
+   */
+  headers?: Record<string, string>;
   /** Shown under the field, e.g. free-tier limits. */
   notes?: string;
   suggestedModels?: SuggestedModel[];
@@ -51,6 +56,10 @@ const LOCAL_CONTEXT = 12_000;
 const DEFAULT_MAX_OUTPUT = 2_048;
 const LARGE_MAX_OUTPUT = 4_096;
 const DEFAULT_TIMEOUT_MS = 45_000;
+const OPENCODE_TIMEOUT_MS = 60_000;
+
+/** Stable for the lifetime of the app process; the gateway recommends a per-conversation id. */
+const OPENCODE_SESSION_ID = `freehaven-${Math.random().toString(36).slice(2, 10)}`;
 
 function capabilities(
   overrides: Partial<ProviderCapabilities> & Pick<ProviderCapabilities, 'jsonSchema' | 'jsonObject'>,
@@ -201,6 +210,38 @@ export const PRESETS: readonly ProviderPreset[] = [
     suggestedModels: [
       { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
       { id: 'gpt-4o', label: 'GPT-4o' },
+    ],
+  },
+  {
+    id: 'opencode-go',
+    label: 'OpenCode Go',
+    baseUrl: 'https://opencode.ai/inference/go/openai/v1',
+    defaultModel: 'deepseek-v4.1-flash',
+    requiresKey: true,
+    capabilities: capabilities({
+      jsonSchema: false,
+      jsonObject: true,
+      contextChars: HOSTED_CONTEXT,
+      maxOutputTokens: DEFAULT_MAX_OUTPUT,
+    }),
+    timeoutMs: OPENCODE_TIMEOUT_MS,
+    headers: {
+      'User-Agent': 'Freehaven/1.0',
+      'x-opencode-session': OPENCODE_SESSION_ID,
+    },
+    notes:
+      'Subscription key from opencode.ai/console; DeepSeek V4.1 Flash needs Regions = Global in the console privacy settings.',
+    suggestedModels: [
+      { id: 'deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash' },
+      { id: 'glm-5.3-flash', label: 'GLM-5.3-Flash' },
+      { id: 'qwen3.8-flash', label: 'Qwen3.8 Flash' },
+      { id: 'minimax-m3.1-flash', label: 'MiniMax M3.1 Flash' },
+      { id: 'kimi-k2.7-code', label: 'Kimi K2.7 Code' },
+      { id: 'mimo-v2.6-flash', label: 'MiMo-V2.6-Flash' },
+      { id: 'longcat-2.0', label: 'LongCat-2.0' },
+      { id: 'step-5-preview', label: 'Step 5 Preview' },
+      { id: 'beam-free', label: 'Beam', hint: 'Free / limited time' },
+      { id: 'iceman-contributor-free', label: 'Iceman Contributor', hint: 'Free / limited time' },
     ],
   },
   {

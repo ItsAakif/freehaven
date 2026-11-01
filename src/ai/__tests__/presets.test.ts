@@ -16,6 +16,7 @@ const TABLE_IDS = [
   'together',
   'fireworks',
   'openai',
+  'opencode-go',
   'ollama',
   'lmstudio',
   'custom',
@@ -27,11 +28,49 @@ describe('provider presets', () => {
     expect(PRESETS.map((preset) => preset.id).sort()).toEqual([...TABLE_IDS].sort());
     expect(new Set(PRESETS.map((preset) => preset.id)).size).toBe(PRESETS.length);
     for (const preset of PRESETS) {
+      expect(preset.id.trim()).not.toBe('');
       expect(preset.label.trim()).not.toBe('');
+      // The custom row is deliberately blank until the user fills it in.
+      if (preset.id !== 'custom') {
+        expect(preset.baseUrl.trim()).not.toBe('');
+        expect(preset.defaultModel.trim()).not.toBe('');
+      }
       expect(preset.capabilities.contextChars).toBeGreaterThan(0);
       expect(preset.capabilities.maxOutputTokens).toBeGreaterThan(0);
       expect(preset.timeoutMs).toBeGreaterThan(0);
     }
+  });
+
+  it('exposes OpenCode Go as a hosted OpenAI-compatible preset', () => {
+    const preset = getPreset('opencode-go');
+    expect(preset.id).toBe('opencode-go');
+    expect(preset.label).toBe('OpenCode Go');
+    expect(preset.baseUrl).toBe('https://opencode.ai/inference/go/openai/v1');
+    expect(preset.defaultModel).toBe('deepseek-v4.1-flash');
+    expect(preset.requiresKey).toBe(true);
+    expect(preset.capabilities).toMatchObject({
+      jsonSchema: false,
+      jsonObject: true,
+      systemRole: true,
+      openRouterRouting: false,
+      contextChars: 24_000,
+    });
+    expect(preset.timeoutMs).toBe(60_000);
+
+    const models = preset.suggestedModels ?? [];
+    expect(models.map((model) => model.id)).toContain(preset.defaultModel);
+    for (const model of models) {
+      expect(model.id.trim()).not.toBe('');
+      expect(model.id.startsWith('opencode-go/')).toBe(false);
+    }
+    for (const id of ['beam-free', 'iceman-contributor-free']) {
+      const free = models.find((model) => model.id === id);
+      expect(free?.hint).toMatch(/free/i);
+    }
+
+    expect(preset.headers?.['User-Agent']).toBe('Freehaven/1.0');
+    expect(preset.headers?.['x-opencode-session']).toMatch(/^freehaven-/);
+    expect(inferPresetId('https://opencode.ai/inference/go/openai/v1/')).toBe('opencode-go');
   });
 
   it('resolves unknown preset ids to custom', () => {

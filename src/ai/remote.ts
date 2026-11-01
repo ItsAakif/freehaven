@@ -218,6 +218,25 @@ function normaliseStoreKey(baseUrl: string, model: string): string {
   return `freehaven.ai.capability.${baseUrl.replace(/\/+$/, '')}|${model.trim()}`;
 }
 
+/**
+ * Headers for one HTTP attempt. Preset headers are static metadata (session id,
+ * client name); they may never override the Authorization or Content-Type the
+ * transport owns.
+ */
+export function buildRequestHeaders(
+  preset: ProviderPreset,
+  apiKey: string,
+): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  for (const [name, value] of Object.entries(preset.headers ?? {})) {
+    const lower = name.toLowerCase();
+    if (lower === 'authorization' || lower === 'content-type') continue;
+    headers[name] = value;
+  }
+  if (apiKey.trim()) headers.Authorization = `Bearer ${apiKey}`;
+  return headers;
+}
+
 /** The json_schema rung must describe the shape the task actually asks for. */
 function schemaForTask(task: AiRequest['task']): { schema: JsonSchema; name: string } {
   if (task === 'notes') return { schema: NOTES_SCHEMA, name: 'grounded_notes' };
@@ -426,12 +445,7 @@ export class OpenAiCompatibleProvider implements AiProvider {
           {
             method: 'POST',
             signal: controller.signal,
-            headers: {
-              'Content-Type': 'application/json',
-              ...(this.options.apiKey.trim()
-                ? { Authorization: `Bearer ${this.options.apiKey}` }
-                : {}),
-            },
+            headers: buildRequestHeaders(preset, this.options.apiKey),
             body: JSON.stringify(planned.body),
           },
         );
