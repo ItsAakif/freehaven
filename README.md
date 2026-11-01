@@ -18,7 +18,7 @@ traffic is the requests you trigger, to a model provider you chose.
 
 https://github.com/user-attachments/assets/6f1f28d7-45dc-4162-8df1-104260b43ce8
 
-<p align="center"><sub><b>27-second launch video</b> &nbsp;&middot;&nbsp; captured on a phone</sub></p>
+<p align="center"><sub><b>27-second launch video</b></sub></p>
 
 ---
 
